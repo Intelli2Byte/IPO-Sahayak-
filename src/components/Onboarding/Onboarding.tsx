@@ -26,26 +26,9 @@ const NO_AUTOFILL = {
 const CIN_LENGTH = 21; 
 
 interface McaProfile {
-  corporateIdentity: string;
-  authorizedPromoterPan: string;
-  paidUpCapital: string;
-  status: string;
+  cin: string;
+  companyName: string;
 }
-
-const MCA21_MOCK_DB: Record<string, McaProfile> = {
-  'U12345MH2023PTC123456': {
-    corporateIdentity: 'Reliance Tech Ventures Pvt Ltd',
-    authorizedPromoterPan: 'ABCDE1234F',
-    paidUpCapital: '₹50,00,000',
-    status: 'Active',
-  },
-  'U51909TG2019PLC133166': {
-    corporateIdentity: 'Neha Fashion Private Limited',
-    authorizedPromoterPan: 'ABJPK4921F',
-    paidUpCapital: '₹2,00,00,000',
-    status: 'Active',
-  }
-};
 
 const generateNumericCaptcha = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -70,13 +53,11 @@ function AmbientBackground() {
   );
 }
 
-
-
 function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-white py-3.5 mt-auto shrink-0 z-10">
       <p className="font-sans mx-auto max-w-7xl px-6 text-center text-xs text-slate-400 font-semibold sm:px-8">
-        A unified issuer services facility under SEBI · Ministry of Corporate Affairs · GSTN
+        Powered by IPO Sahayak · MCA21 data
       </p>
     </footer>
   );
@@ -166,8 +147,10 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
   const [captchaInput, setCaptchaInput] = useState('');
   const [fetchStatus, setFetchStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('idle'); 
   const [profile, setProfile] = useState<McaProfile | null>(null);
+  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const captchaInputRef = useRef<HTMLDivElement>(null); 
@@ -198,6 +181,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
     }
   }, [captchaInput, captchaValue]);
 
+  // Real CIN -> CompanyName lookup against /api/companies/lookup (mca21-companies-v1)
   useEffect(() => {
     const normalized = cin.trim().toUpperCase();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -209,15 +193,25 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
     }
 
     setFetchStatus('loading');
-    timeoutRef.current = setTimeout(() => {
-      const record = MCA21_MOCK_DB[normalized];
-      if (record) {
-        setProfile(record);
+    timeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/companies/lookup?cin=${encodeURIComponent(normalized)}`);
+
+        if (res.status === 404) {
+          setProfile(null);
+          setFetchStatus('error');
+          return;
+        }
+        if (!res.ok) throw new Error('lookup failed');
+
+        const data = await res.json();
+        setProfile({ cin: data.cin, companyName: data.companyName });
         setFetchStatus('resolved');
-      } else {
+      } catch {
+        setProfile(null);
         setFetchStatus('error');
       }
-    }, 800);
+    }, 500);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -236,11 +230,37 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
   const isCaptchaValid = captchaInput === captchaValue && captchaValue !== '';
   const isCaptchaError = captchaInput.length === 6 && !isCaptchaValid;
   const isPasswordValid = password.length >= 8 && /[A-Z]/.test(password) && /[0-9]/.test(password);
-  const canSubmit = isVerified && registryEmail.includes('@') && isPasswordValid && isCaptchaValid;
+  const canSubmit = isVerified && registryEmail.includes('@') && isPasswordValid && isCaptchaValid && !submitting;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (canSubmit) onComplete(); 
+    if (!canSubmit || !profile) return;
+
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: registryEmail,
+          password,
+          cin: profile.cin,
+          companyName: profile.companyName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setSubmitError(data.error ?? 'Registration failed');
+        return;
+      }
+      onComplete();
+    } catch {
+      setSubmitError('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -280,7 +300,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
                 maxLength={CIN_LENGTH}
                 value={cin}
                 onChange={(e) => setCin(e.target.value.toUpperCase())}
-                placeholder="Enter 21-character CIN (e.g. U51909TG2019PLC133166...)"
+                placeholder="Enter 21-character CIN (e.g. U25209PN2022PTC210301)"
                 className={`font-sans w-full rounded-xl border bg-white px-3.5 py-2.5 pr-10 text-sm font-bold uppercase tracking-wide text-slate-800 outline-none transition-all focus:ring-4 ${
                   fetchStatus === 'resolved'
                     ? 'border-emerald-500 focus:border-emerald-600 focus:ring-emerald-500/20'
@@ -298,7 +318,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
             
             <div className="font-sans mt-1.5 flex justify-between text-[10px] font-bold">
               <span className={fetchStatus === 'error' ? 'text-red-500' : 'text-slate-500'}>
-                {fetchStatus === 'error' ? 'CIN not found in MCA21 registry.' : 'Try: U51909TG2019PLC133166'}
+                {fetchStatus === 'error' ? 'CIN not found in MCA21 registry.' : 'Enter your 21-character CIN'}
               </span>
               <span className={`transition-colors ${cin.length === CIN_LENGTH ? 'text-emerald-600' : 'text-slate-400'}`}>
                 {cin.length} / {CIN_LENGTH}
@@ -314,11 +334,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
                   Verified via MCA21
                 </p>
               </div>
-              <div className="space-y-2">
-                <ReadOnlyRow label="Company Name" value={profile?.corporateIdentity} />
-                <ReadOnlyRow label="Authorized PAN" value={profile?.authorizedPromoterPan} />
-                <ReadOnlyRow label="Status" value={profile?.status} />
-              </div>
+              <ReadOnlyRow label="Company Name" value={profile?.companyName} />
             </div>
           </div>
 
@@ -330,7 +346,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
                 {...NO_AUTOFILL}
                 value={registryEmail}
                 onChange={(e) => setRegistryEmail(e.target.value)}
-                placeholder="compliance@nehafashion.com"
+                placeholder="compliance@yourcompany.com"
                 className="font-sans w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20"
               />
             </Field>
@@ -410,6 +426,13 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
               </div>
             </div>
           </Field>
+
+          {submitError && (
+            <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-600 text-xs font-bold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
         </div>
 
         <button
@@ -421,7 +444,7 @@ function SignUpScreen({ onBack, onComplete, onToggleLogin }: SignUpScreenProps) 
               : 'bg-slate-200 text-slate-500 cursor-not-allowed'
           }`}
         >
-          Sign Up & Create Account
+          {submitting ? 'Creating Account…' : 'Sign Up & Create Account'}
         </button>
 
         <p className="text-center text-xs text-slate-500 mt-4 font-semibold">
@@ -453,6 +476,7 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
   const [captchaValue, setCaptchaValue] = useState('');
   const [captchaInput, setCaptchaInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const captchaInputRef = useRef<HTMLDivElement>(null);
@@ -474,11 +498,11 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
     return () => ctx.revert();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (captchaInput !== captchaValue) {
       setErrorMsg('Security Captcha code does not match.');
-      // shake captcha field
       gsap.fromTo(
         captchaInputRef.current,
         { x: -5 },
@@ -486,11 +510,30 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
       );
       return;
     }
-    // Successful login transition
-    onComplete();
+
+    setErrorMsg('');
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data.error ?? 'Login failed');
+        return;
+      }
+      onComplete();
+    } catch {
+      setErrorMsg('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const canSubmit = email.includes('@') && password.length >= 6 && captchaInput.length === 6;
+  const canSubmit = email.includes('@') && password.length >= 6 && captchaInput.length === 6 && !submitting;
 
   return (
     <div className="relative isolate flex flex-1 items-center justify-center px-4 py-4 sm:px-6 w-full">
@@ -524,7 +567,7 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="compliance@nehafashion.com"
+              placeholder="compliance@yourcompany.com"
               className="font-sans w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20"
             />
           </Field>
@@ -579,7 +622,7 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
           </Field>
 
           {errorMsg && (
-            <div className="p-3 bg-red/5 border border-red/10 rounded-lg flex items-center gap-2 text-red text-xs font-bold animate-pulse">
+            <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-600 text-xs font-bold">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -595,7 +638,7 @@ function LoginScreen({ onBack, onComplete, onToggleRegister }: LoginScreenProps)
               : 'bg-slate-200 text-slate-500 cursor-not-allowed'
           }`}
         >
-          Sign In to Portal
+          {submitting ? 'Signing In…' : 'Sign In to Portal'}
         </button>
 
         <p className="text-center text-xs text-slate-500 mt-4 font-semibold">
