@@ -31,3 +31,11 @@
 
 # If you have specific background python files or data scripts, force them to show up
 docling_parser_fixed.py linguist-language=Python
+
+
+# 1. Force GitHub to calculate specific folders as pure Python
+src/components/Wizard/* linguist-detectable=false
+src/components/Dashboard/* linguist-detectable=false
+
+# 2. Artificially expand your python files visibility
+docling_parser_fixed.py linguist-detectable=true
