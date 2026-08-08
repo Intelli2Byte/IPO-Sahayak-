@@ -3,18 +3,28 @@
 import { useEffect, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { mockDashboardStats } from '@/data/mockData';
+import { useLanguage } from '@/context/LanguageContext'; // <-- Imported Language Context
 
 export default function CategoryChart() {
   const [mounted, setMounted] = useState(false);
+
+  // Consume language context
+  const { t, preRegister } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // The tooltip only renders on hover, so pre-register its fixed strings
+  // up front — otherwise they'd never make it into the translation batch.
+  useEffect(() => {
+    preRegister(['Loading analytics charts...', 'Progress', 'Status']);
+  }, [preRegister]);
+
   if (!mounted) {
     return (
       <div className="h-72 w-full bg-slate-50 animate-pulse rounded-2xl flex items-center justify-center text-slate-400 font-medium text-sm">
-        Loading analytics charts...
+        {t('Loading analytics charts...')}
       </div>
     );
   }
@@ -37,12 +47,12 @@ export default function CategoryChart() {
       const data = payload[0].payload;
       return (
         <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-800 text-xs font-semibold">
-          <p className="font-bold text-sm mb-1">{data.category}</p>
+          <p className="font-bold text-sm mb-1">{t(data.category)}</p>
           <div className="flex items-center gap-2 mt-1">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.fill }} />
-            <span>Progress: {data.progress}%</span>
+            <span>{t('Progress')}: {data.progress}%</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-1 uppercase">Status: {data.status.replace('_', ' ')}</p>
+          <p className="text-[10px] text-slate-400 mt-1 uppercase">{t('Status')}: {t(data.status.replace('_', ' '))}</p>
         </div>
       );
     }
@@ -68,6 +78,7 @@ export default function CategoryChart() {
           <YAxis 
             dataKey="category" 
             type="category" 
+            tickFormatter={(value: string) => t(value)}
             tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
