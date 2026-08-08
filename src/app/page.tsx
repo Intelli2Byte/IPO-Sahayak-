@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { User, Settings, ShieldAlert, Key, X, Lock, CheckCircle2 } from 'lucide-react';
 import Sidebar from '@/components/Layout/Sidebar';
@@ -26,6 +26,39 @@ export default function Home() {
   // Settings Configuration states
   const [mfaEnabled, setMfaEnabled] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState('30');
+
+  // Dynamic Profile State with fixed Name & Designation
+  const [profileData, setProfileData] = useState({
+    name: 'Isha Ambani',
+    designation: 'Board of Director',
+    email: 'isha.ambani@reliance.com',
+    cin: 'U72900GJ2007PLC105869',
+    din: '08492311',
+    authority: 'Primary Promoter'
+  });
+
+  // Fetch dynamic user data from API when available
+  useEffect(() => {
+    if (isProfileOpen) {
+      fetch('/api/auth/me')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.user) {
+            setProfileData((prev) => ({
+              ...prev,
+              name: 'Isha Ambani',
+              designation: 'Board of Director',
+              email: data.user.officialEmail || data.user.email || prev.email,
+              cin: data.user.cin || prev.cin,
+              din: data.user.din || prev.din,
+            }));
+          }
+        })
+        .catch((err) => {
+          console.warn('Profile sync waiting for API reconnect:', err);
+        });
+    }
+  }, [isProfileOpen]);
 
   // Animate tab transitions (fade + scale + blur)
   const handleTabChange = (newTab: string) => {
@@ -191,34 +224,34 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full overflow-hidden border border-slate-200 shrink-0">
                 <img 
-                  src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" 
-                  alt="Rajesh Kumar"
+                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=256&h=256&q=80" 
+                  alt="Isha Ambani"
                   className="w-full h-full object-cover"
                 />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800">Rajesh Kumar</h3>
-                <p className="text-xs text-slate-400 font-semibold mt-0.5">Managing Director & CEO</p>
+                <h3 className="text-base font-bold text-slate-800">{profileData.name}</h3>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5">{profileData.designation}</p>
               </div>
             </div>
 
             <div className="border-t border-slate-50 pt-4 space-y-3.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-450 font-bold uppercase tracking-wider">DIN Number</span>
-                <span className="text-slate-800 font-bold">08492311</span>
+                <span className="text-slate-800 font-bold">{profileData.din}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-450 font-bold uppercase tracking-wider">PAN Identity</span>
-                <span className="text-slate-800 font-bold uppercase">ABJPK4921F</span>
+                <span className="text-slate-450 font-bold uppercase tracking-wider">CIN Verification</span>
+                <span className="text-slate-800 font-bold uppercase">{profileData.cin}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-450 font-bold uppercase tracking-wider">Registry Email</span>
-                <span className="text-slate-800 font-bold">rajesh.kumar@nehafashion.com</span>
+                <span className="text-slate-800 font-bold">{profileData.email}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-450 font-bold uppercase tracking-wider">Authority Status</span>
                 <span className="text-success bg-emerald-50 px-2 py-0.5 border border-emerald-100/50 rounded-md font-bold text-[10px] uppercase">
-                  Primary Promoter
+                  {profileData.authority}
                 </span>
               </div>
             </div>
@@ -250,7 +283,7 @@ export default function Home() {
               </span>
               <div>
                 <h3 className="text-base font-bold text-slate-800">Portal Security Settings</h3>
-                <p className="text-xs text-slate-400 font-semibold mt-0.5">Control auth requirements and local vault security.</p>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5 font-sans">Control auth requirements and local vault security.</p>
               </div>
             </div>
 
@@ -307,7 +340,7 @@ export default function Home() {
 
       {/* Custom responsive mobile fixes */}
       <style jsx global>{`
-        @media (max-w: 768px) {
+        @media (max-width: 768px) {
           div[style*="padding-left"] {
             padding-left: 0px !important;
           }
