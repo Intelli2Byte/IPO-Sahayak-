@@ -9,13 +9,13 @@ import {
   Users, 
   ChevronLeft, 
   ChevronRight,
-  TrendingUp,
   User,
   Settings,
-  LogOut,
-  Briefcase
+  LogOut
 } from 'lucide-react';
 import gsap from 'gsap';
+import { mockIpoApplication, mockDocumentVault, mockComplianceTracker } from '@/data/mockData';
+import { useLanguage } from '@/context/LanguageContext'; // <-- Imported Language Context
 
 interface SidebarProps {
   currentTab: string;
@@ -42,15 +42,30 @@ export default function Sidebar({
 
   const [showFooterMenu, setShowFooterMenu] = useState(false);
 
+  // Consume language context
+  const { t, preRegister } = useLanguage();
+
+  // Footer dropdown is closed by default — pre-register its text so it's
+  // already translated the first time the user toggles to Hindi.
+  useEffect(() => {
+    preRegister(['My Profile', 'Portal Settings', 'Logout']);
+  }, [preRegister]);
+
+  // Real counts pulled from existing data
+  const wizardPending = mockIpoApplication.stepProgress.filter(s => s.status !== 'completed').length;
+  const vaultPending = mockDocumentVault.summary.totalRequired - mockDocumentVault.summary.totalUploaded;
+  const complianceAlerts = mockComplianceTracker.categories.reduce((count, cat) => {
+    return count + cat.items.filter(item => item.priority === 'high' && item.status !== 'completed').length;
+  }, 0);
+
   const menuItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'wizard', label: 'IPO Wizard', icon: FileEdit },
-    { id: 'vault', label: 'Document Vault', icon: FolderLock },
-    { id: 'compliance', label: 'Compliance Tracker', icon: ShieldCheck },
-    { id: 'team', label: 'Team & Access', icon: Users },
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard, badge: null as number | null },
+    { id: 'wizard', label: 'IPO Wizard', icon: FileEdit, badge: wizardPending > 0 ? wizardPending : null },
+    { id: 'vault', label: 'Document Vault', icon: FolderLock, badge: vaultPending > 0 ? vaultPending : null },
+    { id: 'compliance', label: 'Compliance Tracker', icon: ShieldCheck, badge: complianceAlerts > 0 ? complianceAlerts : null },
+    { id: 'team', label: 'Team & Access', icon: Users, badge: null as number | null },
   ];
 
-  // Stagger entry animation for menu items on load
   useEffect(() => {
     const items = menuContainerRef.current?.querySelectorAll('.menu-item-anim');
     if (items && items.length > 0) {
@@ -68,7 +83,6 @@ export default function Sidebar({
     }
   }, []);
 
-  // Outside click listener to dismiss profile popover
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (footerRef.current && !footerRef.current.contains(event.target as Node)) {
@@ -79,7 +93,6 @@ export default function Sidebar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Animate sidebar width changes
   useEffect(() => {
     const sidebar = sidebarRef.current;
     if (!sidebar) return;
@@ -90,7 +103,6 @@ export default function Sidebar({
         duration: 0.4,
         ease: 'power3.out',
       });
-      // Show full logo text
       gsap.to('.logo-text', { opacity: 1, display: 'block', duration: 0.2, delay: 0.1 });
     } else {
       gsap.to(sidebar, {
@@ -98,7 +110,6 @@ export default function Sidebar({
         duration: 0.35,
         ease: 'power2.inOut',
       });
-      // Hide logo text
       gsap.to('.logo-text', { opacity: 0, display: 'none', duration: 0.15 });
     }
   }, [isOpen]);
@@ -112,7 +123,6 @@ export default function Sidebar({
       ref={sidebarRef}
       className="fixed top-20 left-0 h-[calc(100vh-80px)] bg-slate-950 border-r border-slate-900 text-slate-400 z-30 flex flex-col w-64 select-none shrink-0"
     >
-      {/* Floating Collapse/Expand Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="absolute -right-3.5 top-6 w-7 h-7 rounded-full bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white flex items-center justify-center shadow-md shadow-slate-950/50 z-50 cursor-pointer transition-all hover:scale-105"
@@ -125,8 +135,7 @@ export default function Sidebar({
         )}
       </button>
 
-      {/* Navigation List */}
-      <nav ref={menuContainerRef} className="flex-1 px-4 py-6 space-y-1.5">
+      <nav ref={menuContainerRef} className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
@@ -141,7 +150,6 @@ export default function Sidebar({
                   : 'hover:text-white hover:bg-slate-900/60'
               }`}
             >
-              {/* Active Indicator slide-effect background */}
               {isActive && (
                 <span className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-emerald-400 rounded-r-md" />
               )}
@@ -150,16 +158,35 @@ export default function Sidebar({
                 isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'
               }`} />
 
-              <span className={`transition-opacity whitespace-nowrap overflow-hidden duration-200 ${
+              <span className={`flex-1 flex items-center justify-between transition-opacity duration-200 overflow-hidden ${
                 isOpen ? 'opacity-100' : 'opacity-0 md:w-0'
               }`}>
-                {item.label}
+                {/* TRUNCATE LABEL SO THE BADGE DOESN'T GET SQUISHED */}
+                <span className="truncate pr-2">{t(item.label)}</span>
+                
+                {item.badge !== null && (
+                  <span
+                    className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 whitespace-nowrap ${
+                      item.id === 'compliance'
+                        ? 'bg-red/15 text-red'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {item.badge} {item.id === 'compliance' ? t('alert' + (item.badge > 1 ? 's' : '')) : t('pending')}
+                  </span>
+                )}
               </span>
 
-              {/* Tooltip for collapsed mode */}
               {!isOpen && (
-                <div className="absolute left-20 bg-slate-950 text-white text-xs px-3 py-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:left-24 transition-all duration-300 shadow-xl border border-slate-800 z-50 whitespace-nowrap hidden md:block">
-                  {item.label}
+                <div className="absolute left-20 bg-slate-950 text-white text-xs px-3 py-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:left-24 transition-all duration-300 shadow-xl border border-slate-800 z-50 whitespace-nowrap hidden md:flex items-center gap-2">
+                  <span>{t(item.label)}</span>
+                  {item.badge !== null && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      item.id === 'compliance' ? 'bg-red/15 text-red' : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </div>
               )}
             </button>
@@ -167,7 +194,6 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* Footer Info with click popover */}
       <div className="relative" ref={footerRef}>
         {showFooterMenu && (
           <div className="absolute bottom-16 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl py-1.5 shadow-2xl z-50 animate-fade-in space-y-0.5">
@@ -176,14 +202,14 @@ export default function Sidebar({
               className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-300 hover:text-white hover:bg-slate-800/80 text-xs font-bold text-left cursor-pointer transition-colors"
             >
               <User className="w-4 h-4 text-slate-500" />
-              <span>My Profile</span>
+              <span>{t('My Profile')}</span>
             </button>
             <button 
               onClick={() => { setShowFooterMenu(false); onSettingsClick(); }}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-300 hover:text-white hover:bg-slate-800/80 text-xs font-bold text-left cursor-pointer transition-colors"
             >
               <Settings className="w-4 h-4 text-slate-500" />
-              <span>Portal Settings</span>
+              <span>{t('Portal Settings')}</span>
             </button>
             <div className="h-px bg-slate-800/85 my-1" />
             <button 
@@ -191,7 +217,7 @@ export default function Sidebar({
               className="w-full flex items-center gap-3 px-4 py-2.5 text-red hover:bg-red/5 text-xs font-bold text-left cursor-pointer transition-colors"
             >
               <LogOut className="w-4 h-4 text-red" />
-              <span>Logout</span>
+              <span>{t('Logout')}</span>
             </button>
           </div>
         )}
@@ -209,7 +235,7 @@ export default function Sidebar({
           </div>
           <div className={`logo-text overflow-hidden transition-all duration-200 ${isOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
             <p className="text-xs font-semibold text-white leading-none whitespace-nowrap">Rajesh Kumar</p>
-            <span className="text-[10px] text-slate-500 whitespace-nowrap">Promoter / CEO</span>
+            <span className="text-[10px] text-slate-500 whitespace-nowrap">{t('Promoter / CEO')}</span>
           </div>
         </div>
       </div>
