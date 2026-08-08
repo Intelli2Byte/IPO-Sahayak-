@@ -1,41 +1,55 @@
-# ==========================================
-# 1. HIDE NON-CODE & TEMPORARY FILES
-# ==========================================
-# Removes PDFs, logs, spreadsheets, and charts from bloating the bar
+# =========================================================
+# GITHUB LINGUIST ATTRIBUTES
+# IPO SAHAYAK
+# =========================================================
+
+# ---------------------------------------------------------
+# DATA / DOCUMENTATION / GENERATED FILES
+# ---------------------------------------------------------
+
 *.pdf linguist-vendored
-*.xls linguist-vendored
 *.xlsx linguist-vendored
-*.json linguist-vendored
-*.md linguist-vendored
+*.xls linguist-vendored
+
 *.png linguist-vendored
-*.jpeg linguist-vendored
 *.jpg linguist-vendored
+*.jpeg linguist-vendored
+*.gif linguist-vendored
 
-# ==========================================
-# 2. OPTIMIZE FOR PROPER MERN (TypeScript/JavaScript)
-# ==========================================
-# Ensure your Next.js and frontend components stand out
-*.tsx linguist-language=TypeScript
-*.ts linguist-language=TypeScript
-*.jsx linguist-language=JavaScript
-*.js linguist-language=JavaScript
+*.md linguist-documentation
 
-# Hide global CSS stylesheets so 'CSS' doesn't steal percentage from your MERN code
-*.css linguist-documentation
+# Dataset files
+*.csv linguist-vendored
+*.json linguist-vendored
 
-# ==========================================
-# 3. FORCE MAXIMUM PYTHON VISIBILITY
-# ==========================================
-# Mark all Python and AI engine scripts as primary codebase languages
+# ---------------------------------------------------------
+# PYTHON
+# ---------------------------------------------------------
+
 *.py linguist-language=Python
 
-# If you have specific background python files or data scripts, force them to show up
-docling_parser_fixed.py linguist-language=Python
+# Python configuration
+*.pyw linguist-language=Python
+*.pyi linguist-language=Python
 
+# ---------------------------------------------------------
+# TYPESCRIPT
+# ---------------------------------------------------------
 
-# 1. Force GitHub to calculate specific folders as pure Python
-src/components/Wizard/* linguist-detectable=false
-src/components/Dashboard/* linguist-detectable=false
+*.ts linguist-language=TypeScript
+*.tsx linguist-language=TypeScript
 
-# 2. Artificially expand your python files visibility
-docling_parser_fixed.py linguist-detectable=true
+# ---------------------------------------------------------
+# JAVASCRIPT
+# ---------------------------------------------------------
+
+*.js linguist-language=JavaScript
+*.jsx linguist-language=JavaScript
+
+# ---------------------------------------------------------
+# STYLESHEETS
+# ---------------------------------------------------------
+
+*.css linguist-documentation
+*.scss linguist-documentation
+*.sass linguist-documentation
