@@ -9,16 +9,36 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await esClient.search({
-      index: 'mca21-companies-v1',
-      size: 1,
-      query: {
-        term: { cin: cin }, // Changed 'CIN.keyword' to 'cin'
-      },
-    });
+    console.time('ES lookup');
 
-    const hit = result.hits.hits[0] as
-      | { _source: { cin: string; companyName: string } } // Changed keys to lowercase
+    const result = await esClient.search(
+      {
+        index: 'mca21-companies-v1',
+        size: 1,
+        track_total_hits: false,
+        query: {
+          bool: {
+            filter: [{ term: { cin } }],
+          },
+        },
+        _source: ['cin', 'companyName'],
+      },
+      {
+        querystring: {
+          filter_path: 'hits.hits._source',
+        },
+      }
+    );
+
+    console.timeEnd('ES lookup');
+
+    const hit = result.hits?.hits?.[0] as
+      | {
+          _source: {
+            cin: string;
+            companyName: string;
+          };
+        }
       | undefined;
 
     if (!hit) {
@@ -27,11 +47,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       found: true,
-      cin: hit._source.cin, // Changed to lowercase
-      companyName: hit._source.companyName, // Changed to lowercase
+      cin: hit._source.cin,
+      companyName: hit._source.companyName,
     });
   } catch (err) {
     console.error('ES lookup error:', err);
-    return NextResponse.json({ error: 'Lookup failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Lookup failed' },
+      { status: 500 }
+    );
   }
 }
