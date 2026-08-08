@@ -27,7 +27,9 @@ export async function createSession(payload: SessionPayload) {
 
 export async function getSession(): Promise<SessionPayload | null> {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
+
   if (!token) return null;
+
   try {
     const { payload } = await jwtVerify(token, secret);
     return payload as unknown as SessionPayload;
