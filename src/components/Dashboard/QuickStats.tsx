@@ -3,10 +3,20 @@
 import { useEffect, useRef } from 'react';
 import * as Icons from 'lucide-react';
 import gsap from 'gsap';
-import { mockDashboardStats } from '@/data/mockData';
+import { mockDashboardStats, mockIpoApplication } from '@/data/mockData';
+import { useLanguage } from '@/context/LanguageContext'; // <-- Imported Language Context
 
 export default function QuickStats() {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Consume language context
+  const { t } = useLanguage();
+
+  // Real, derived helper numbers (not invented) used for the secondary caption on each card
+  const completedSteps = mockIpoApplication.stepProgress.filter(s => s.status === 'completed').length;
+  const totalSteps = mockIpoApplication.totalSteps;
+  const nextMilestone = mockIpoApplication.stepProgress.find(s => s.status !== 'completed');
+  const docsRemaining = mockDashboardStats.overview.totalDocumentsRequired - mockDashboardStats.overview.documentsUploaded;
 
   useEffect(() => {
     const cards = containerRef.current?.querySelectorAll('.stat-card');
@@ -62,6 +72,22 @@ export default function QuickStats() {
     });
   }, []);
 
+  // Returns a short, plain-language secondary line for a given card (info hierarchy improvement)
+  const getSecondaryCaption = (statId: string): string | null => {
+    switch (statId) {
+      case 'stat_1':
+        return `${completedSteps} ${t('of')} ${totalSteps} ${t('milestones')}${nextMilestone ? ` · ${t('Next')}: ${t(nextMilestone.stepName)}` : ''}`;
+      case 'stat_2':
+        return `${docsRemaining} ${docsRemaining === 1 ? t('document remaining') : t('documents remaining')}`;
+      case 'stat_3':
+        return t('Current compliance score');
+      case 'stat_4':
+        return t('Under Merchant Banker & CA review');
+      default:
+        return null;
+    }
+  };
+
   return (
     <div ref={containerRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 select-none w-full">
       {mockDashboardStats.quickStats.map((stat) => {
@@ -101,6 +127,7 @@ export default function QuickStats() {
 
         const isPercentage = stat.unit === '%';
         const isProgress = stat.total !== undefined;
+        const secondaryCaption = getSecondaryCaption(stat.id);
 
         return (
           <div
@@ -109,7 +136,7 @@ export default function QuickStats() {
           >
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">{stat.label}</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">{t(stat.label)}</p>
                 <div className="flex items-baseline mt-3 gap-1">
                   <span
                     className="text-3xl font-extrabold text-slate-800 counter-value"
@@ -118,10 +145,10 @@ export default function QuickStats() {
                     0
                   </span>
                   {isPercentage && <span className="text-xl font-bold text-slate-600">%</span>}
-                  {stat.unit === 'days' && <span className="text-sm font-semibold text-slate-500 ml-1">days</span>}
+                  {stat.unit === 'days' && <span className="text-sm font-semibold text-slate-500 ml-1">{t('days')}</span>}
                   {isProgress && (
                     <span className="text-sm text-slate-400 font-bold ml-1">
-                      / {stat.total} {stat.unit}
+                      / {stat.total} {t(stat.unit)}
                     </span>
                   )}
                 </div>
@@ -144,12 +171,19 @@ export default function QuickStats() {
               </div>
             )}
 
+            {/* Secondary caption — makes the number's meaning immediately clear */}
+            {secondaryCaption && (
+              <p className="mt-3 text-[11px] text-slate-500 font-bold leading-snug">
+                {secondaryCaption}
+              </p>
+            )}
+
             {/* Description and Change indicator */}
-            <div className="flex items-center gap-1.5 mt-5 text-xs font-semibold text-slate-500">
+            <div className="flex items-center gap-1.5 mt-3 text-xs font-semibold text-slate-500">
               <span className={`flex items-center font-bold ${stat.change >= 0 ? 'text-success' : 'text-error'}`}>
                 {stat.change >= 0 ? '+' : ''}{stat.change}{isPercentage ? '%' : ''}
               </span>
-              <span className="text-slate-400 font-medium">{stat.description}</span>
+              <span className="text-slate-400 font-medium">{t(stat.description)}</span>
             </div>
           </div>
         );
