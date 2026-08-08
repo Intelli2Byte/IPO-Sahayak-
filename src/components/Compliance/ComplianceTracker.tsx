@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Shield, 
   TrendingUp, 
@@ -21,18 +21,19 @@ export default function ComplianceTracker() {
   const [activeCategoryId, setActiveCategoryId] = useState('comp_sebi');
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [overallScore, setOverallScore] = useState(mockComplianceTracker.overallScore);
   const checklistRef = useRef<HTMLDivElement>(null);
 
-  // Recalculate scores when any checklist item status updates
-  useEffect(() => {
+  // Derived, not stored in state: progress % per category + overall score.
+  // useMemo recalculates on read when tracker.categories changes, but never
+  // writes back into state itself — so there's nothing for it to loop on.
+  const { categories: computedCategories, overallScore } = useMemo(() => {
     let totalItems = 0;
     let completedItems = 0;
 
     const updatedCategories = tracker.categories.map((cat) => {
       const catItems = cat.items;
       const catCompleted = catItems.filter(item => item.status === 'completed').length;
-      const catProgress = Math.round((catCompleted / catItems.length) * 100);
+      const catProgress = catItems.length > 0 ? Math.round((catCompleted / catItems.length) * 100) : 0;
 
       totalItems += catItems.length;
       completedItems += catCompleted;
@@ -44,15 +45,20 @@ export default function ComplianceTracker() {
       };
     });
 
-    const newOverallScore = Math.round((completedItems / totalItems) * 100);
-    setOverallScore(newOverallScore);
+    const newOverallScore = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
-    // Animate overall score radial circle or counter rollup
+    return { categories: updatedCategories, overallScore: newOverallScore };
+  }, [tracker.categories]);
+
+  // Animate the radial score counter whenever the derived score changes.
+  // This effect only READS overallScore — it never calls setTracker, so
+  // it can't re-trigger the memo above.
+  useEffect(() => {
     const scoreVal = document.querySelector('.score-radial-val');
     if (scoreVal) {
       const countObj = { value: parseFloat(scoreVal.textContent || '0') };
       gsap.to(countObj, {
-        value: newOverallScore,
+        value: overallScore,
         duration: 1,
         ease: 'power2.out',
         onUpdate: () => {
@@ -60,13 +66,7 @@ export default function ComplianceTracker() {
         }
       });
     }
-
-    setTracker(prev => ({
-      ...prev,
-      categories: updatedCategories,
-      overallScore: newOverallScore
-    }));
-  }, [tracker.categories]);
+  }, [overallScore]);
 
   // Tab switch transition animation
   const handleTabChange = (catId: string) => {
@@ -141,8 +141,8 @@ export default function ComplianceTracker() {
     }
   };
 
-  // Get active category details
-  const activeCategory = tracker.categories.find(c => c.id === activeCategoryId) || tracker.categories[0];
+  // Get active category details (from the derived/computed list)
+  const activeCategory = computedCategories.find(c => c.id === activeCategoryId) || computedCategories[0];
 
   // Filter items based on search query and priority dropdown select
   const filteredItems = activeCategory.items.filter((item) => {
@@ -238,7 +238,7 @@ export default function ComplianceTracker() {
 
         {/* Categories cards list */}
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {tracker.categories.map((cat) => {
+          {computedCategories.map((cat) => {
             const CatIcon = getCategoryIcon(cat.icon);
             const isActive = cat.id === activeCategoryId;
             
