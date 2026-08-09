@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ChevronRight, FileCheck, ShieldCheck } from 'lucide-react';
+import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck } from 'lucide-react';
 import gsap from 'gsap';
 import { DocumentItem, Comment } from '@/data/mockData';
 
@@ -13,20 +13,18 @@ interface SplitDocumentViewerProps {
 
 export default function SplitDocumentViewer({ document: docItem, onClose, onAddReply }: SplitDocumentViewerProps) {
   const [replyText, setReplyText] = useState('');
-  
-  // Check if document has comments/annotations to resolve
-  const isAnnotated = docItem ? (docItem.name.toLowerCase().includes('tax audit') || docItem.status === 'under_review') : false;
-
   const [activeAnnotation, setActiveAnnotation] = useState<number | null>(null);
-  const [iframeSrc, setIframeSrc] = useState('/Tax-Audit-Applicability-FY-2022-23.pdf#page=1');
+  const [iframeSrc, setIframeSrc] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
+  const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
+
   const annotations = [
     {
       id: 1,
       page: 2,
-      title: "Gross Turnover Threshold Verification",
-      description: "Ensure the threshold analysis matches the updated Section 44AB limits of ₹10 Crore for businesses with <5% cash transactions.",
+      title: "Document Verification Required",
+      description: "Please verify all financial figures match the audited statements.",
       status: "pending",
       severity: "high",
       coordinates: { top: '35%', left: '42%' }
@@ -34,37 +32,43 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
     {
       id: 2,
       page: 4,
-      title: "Auditor Signature and UDIN Stamp",
-      description: "The Chartered Accountant's registration seal and Unique Document Identification Number (UDIN) must be visible on the sign-off sheet.",
+      title: "Signature and Stamp Verification",
+      description: "Ensure all authorized signatures and company seals are present.",
       status: "pending",
       severity: "medium",
       coordinates: { top: '72%', left: '65%' }
     }
   ];
 
-  // Sync state whenever docItem changes
   useEffect(() => {
-    if (docItem) {
-      const isAnnotatedDoc = docItem.name.toLowerCase().includes('tax audit') || docItem.status === 'under_review';
+    if (docItem && docItem.url) {
+      const isAnnotatedDoc = docItem.status === 'under_review' || docItem.comments.length > 0;
       setActiveAnnotation(isAnnotatedDoc ? 0 : null);
-      setIframeSrc(isAnnotatedDoc ? '/Tax-Audit-Applicability-FY-2022-23.pdf#page=2' : '/Tax-Audit-Applicability-FY-2022-23.pdf#page=1');
+      
+      // Force PDF to open at page 1 with FitH view (top of page)
+      const pageParam = isAnnotatedDoc ? '#page=2&view=FitH' : '#page=1&view=FitH';
+      setIframeSrc(docItem.url + pageParam);
+    } else {
+      setIframeSrc(null);
     }
   }, [docItem]);
 
   useEffect(() => {
     if (docItem && containerRef.current) {
-      // Full screen fade scale-up animation
       gsap.fromTo(containerRef.current,
         { opacity: 0, scale: 0.98 },
         { opacity: 1, scale: 1, duration: 0.4, ease: 'power3.out' }
       );
 
-      // Stagger right comments & left flags list
-      const items = containerRef.current.querySelectorAll('.stagger-entry');
-      gsap.fromTo(items,
-        { opacity: 0, x: 20 },
-        { opacity: 1, x: 0, stagger: 0.06, duration: 0.4, ease: 'power2.out', delay: 0.15 }
-      );
+      setTimeout(() => {
+        const items = containerRef.current?.querySelectorAll('.stagger-entry');
+        if (items && items.length > 0) {
+          gsap.fromTo(items,
+            { opacity: 0, x: 20 },
+            { opacity: 1, x: 0, stagger: 0.06, duration: 0.4, ease: 'power2.out' }
+          );
+        }
+      }, 100);
     }
   }, [docItem]);
 
@@ -102,9 +106,8 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
       ref={containerRef}
       className="fixed inset-0 z-50 bg-slate-900 flex flex-col md:flex-row overflow-hidden select-none"
     >
-      {/* LEFT PANEL: In-built PDF Browser frame */}
+      {/* LEFT PANEL: PDF Viewer */}
       <div className="flex-1 flex flex-col h-2/3 md:h-full border-r border-slate-800 bg-slate-950 relative">
-        {/* PDF Browser Toolbar */}
         <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-emerald-400" />
@@ -126,15 +129,17 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
           </div>
         </div>
 
-        {/* PDF Document Frame container */}
         <div className="flex-1 w-full relative overflow-hidden bg-slate-900 flex items-center justify-center">
-          <iframe 
-            src={iframeSrc} 
-            className="w-full h-full border-0 select-none"
-            title="PDF Document Viewer"
-          />
+          {iframeSrc ? (
+            <iframe 
+              src={iframeSrc} 
+              className="w-full h-full border-0 select-none"
+              title="PDF Document Viewer"
+            />
+          ) : (
+            <div className="text-slate-400 text-sm font-semibold">Loading document...</div>
+          )}
 
-          {/* PDF Page Digital Highlight Overlay - ONLY when annotated */}
           {isAnnotated && activeAnnotation !== null && annotations[activeAnnotation] && (
             <div 
               className="absolute bg-yellow-400/25 border-2 border-yellow-400 rounded pointer-events-none z-10 shadow-lg shadow-yellow-400/10 animate-pulse transition-all duration-300"
@@ -147,7 +152,6 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
             />
           )}
 
-          {/* Floating review marks / flags indicators on top of PDF frame - ONLY when annotated */}
           {isAnnotated && (
             <div className="absolute top-6 left-6 max-w-sm w-full bg-slate-900/90 border border-slate-700/80 backdrop-blur-md p-4 rounded-xl shadow-2xl z-10 space-y-3">
               <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -160,7 +164,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
                     key={flag.id}
                     onClick={() => {
                       setActiveAnnotation(idx);
-                      setIframeSrc(`/Tax-Audit-Applicability-FY-2022-23.pdf#page=${flag.page}`);
+                      setIframeSrc(`${docItem.url}#page=${flag.page}&view=FitH`);
                     }}
                     className={`w-full p-2.5 rounded-lg border text-left transition-all flex items-start gap-2 cursor-pointer ${
                       activeAnnotation === idx 
@@ -189,12 +193,11 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         </div>
       </div>
 
-      {/* RIGHT PANEL: Audit Panel / Clarification chat OR Read-Only Compliance Metadata */}
+      {/* RIGHT PANEL: Comments or Metadata */}
       <div className="w-full md:w-96 bg-white flex flex-col justify-between h-1/3 md:h-full border-t md:border-t-0 border-slate-200">
         
         {isAnnotated ? (
           <>
-            {/* Panel Header */}
             <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50 shrink-0">
               <div>
                 <span className="text-[9px] bg-warning/15 border border-warning/10 text-warning px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
@@ -210,19 +213,17 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               </button>
             </div>
 
-            {/* Scrollable Chat Stream */}
             <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-white">
               <div className="stagger-entry border border-slate-150 p-4 rounded-xl bg-slate-50 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-bold text-slate-800">SEBI Auditing Desk</p>
                   <p className="text-xs text-slate-500 mt-1 font-medium font-sans">
-                    The Tax Audit report requires revision based on the annotations highlighted on the left.
+                    This document requires revision based on the annotations highlighted on the left.
                   </p>
                 </div>
               </div>
 
-              {/* Render comments thread */}
               {docItem.comments.map((comment) => {
                 const isReviewer = comment.author.includes('Reviewer') || comment.author.includes('SEBI');
                 return (
@@ -249,7 +250,6 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               })}
             </div>
 
-            {/* Chat input box */}
             <form onSubmit={handleSubmitReply} className="p-4 border-t border-slate-200 bg-slate-50 shrink-0">
               <div className="chat-send-box flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                 <MessageSquare className="w-4 h-4 text-slate-400" />
@@ -277,7 +277,6 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
           </>
         ) : (
           <>
-            {/* Read-Only Document Details View */}
             <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50 shrink-0">
               <div>
                 <span className="text-[9px] bg-emerald-50 border border-emerald-150 text-emerald-600 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
@@ -293,7 +292,6 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               </button>
             </div>
 
-            {/* Read-only Document compliance checklist */}
             <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-white">
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Audit History Log</h4>
@@ -309,7 +307,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200">
-                      <FileCheck className="w-3.5 h-3.5 text-slate-500" />
+                      <FileText className="w-3.5 h-3.5 text-slate-500" />
                     </span>
                     <div>
                       <p className="font-bold text-slate-800">File Signature</p>
