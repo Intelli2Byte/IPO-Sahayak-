@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-
+import './pdf-styles.css'; // Add this line
 // 1. Import the LanguageProvider we created
 import { LanguageProvider } from "@/context/LanguageContext";
 
