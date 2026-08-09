@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
 import gsap from 'gsap';
 import { DocumentItem, Comment } from '@/data/mockData';
 
@@ -11,66 +11,126 @@ interface SplitDocumentViewerProps {
   onAddReply: (documentId: string, replyText: string) => void;
 }
 
+interface DrawingStroke {
+  id: string;
+  documentId: string;
+  pageNumber: number;
+  color: string;
+  points: { x: number; y: number }[];
+  lineWidth: number;
+}
+
 export default function SplitDocumentViewer({ document: docItem, onClose, onAddReply }: SplitDocumentViewerProps) {
   const [replyText, setReplyText] = useState('');
-  const [activeAnnotation, setActiveAnnotation] = useState<number | null>(null);
-  const [iframeSrc, setIframeSrc] = useState<string | null>(null);
+  const [scale, setScale] = useState<number>(0.8); // 80% default zoom
+  const [drawings, setDrawings] = useState<DrawingStroke[]>([]);
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
+  const [highlighterMode, setHighlighterMode] = useState<'yellow' | 'red' | null>(null);
+  const [drawingHistory, setDrawingHistory] = useState<DrawingStroke[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const viewerScrollRef = useRef<HTMLDivElement>(null);
   
   const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
 
-  const annotations = [
-    {
-      id: 1,
-      page: 2,
-      title: "Document Verification Required",
-      description: "Please verify all financial figures match the audited statements.",
-      status: "pending",
-      severity: "high",
-      coordinates: { top: '35%', left: '42%' }
-    },
-    {
-      id: 2,
-      page: 4,
-      title: "Signature and Stamp Verification",
-      description: "Ensure all authorized signatures and company seals are present.",
-      status: "pending",
-      severity: "medium",
-      coordinates: { top: '72%', left: '65%' }
-    }
-  ];
-
+  // Load drawings from localStorage (document-specific)
   useEffect(() => {
-    if (docItem && docItem.url) {
-      const isAnnotatedDoc = docItem.status === 'under_review' || docItem.comments.length > 0;
-      setActiveAnnotation(isAnnotatedDoc ? 0 : null);
-      
-      // Force PDF to open at page 1 with FitH view (top of page)
-      const pageParam = isAnnotatedDoc ? '#page=2&view=FitH' : '#page=1&view=FitH';
-      setIframeSrc(docItem.url + pageParam);
-    } else {
-      setIframeSrc(null);
+    if (docItem) {
+      const stored = localStorage.getItem(`drawings_${docItem.id}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          // Filter to ensure only this document's highlights
+          const documentDrawings = parsed.filter((d: DrawingStroke) => d.documentId === docItem.id);
+          setDrawings(documentDrawings);
+          setDrawingHistory([documentDrawings]);
+          setHistoryIndex(0);
+        } catch (e) {
+          console.error('Failed to parse drawings', e);
+          setDrawings([]);
+          setDrawingHistory([[]]);
+          setHistoryIndex(0);
+        }
+      } else {
+        // No stored drawings for this document
+        setDrawings([]);
+        setDrawingHistory([[]]);
+        setHistoryIndex(0);
+      }
     }
-  }, [docItem]);
+  }, [docItem?.id]);
 
+  // Save drawings to localStorage (document-specific)
+  useEffect(() => {
+    if (docItem) {
+      localStorage.setItem(`drawings_${docItem.id}`, JSON.stringify(drawings));
+    }
+  }, [drawings, docItem?.id]);
+
+  // Entrance animation WITHOUT scrolling to top
   useEffect(() => {
     if (docItem && containerRef.current) {
+      // Prevent body scroll during modal open
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+
       gsap.fromTo(containerRef.current,
         { opacity: 0, scale: 0.98 },
         { opacity: 1, scale: 1, duration: 0.4, ease: 'power3.out' }
       );
-
-      setTimeout(() => {
-        const items = containerRef.current?.querySelectorAll('.stagger-entry');
-        if (items && items.length > 0) {
-          gsap.fromTo(items,
-            { opacity: 0, x: 20 },
-            { opacity: 1, x: 0, stagger: 0.06, duration: 0.4, ease: 'power2.out' }
-          );
-        }
-      }, 100);
     }
+
+    // Cleanup: restore scroll position
+    return () => {
+      const scrollY = document.body.style.top;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
+    };
   }, [docItem]);
+
+  // Redraw canvas when drawings change
+  useEffect(() => {
+    if (drawingCanvasRef.current) {
+      const canvas = drawingCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw all strokes for this document
+      const documentDrawings = drawings.filter(d => d.documentId === docItem?.id);
+      documentDrawings.forEach(stroke => {
+        if (stroke.points.length < 2) return;
+
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.4;
+
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+        
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+      });
+    }
+  }, [drawings, docItem?.id]);
 
   const handleClose = () => {
     if (containerRef.current) {
@@ -79,7 +139,17 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         scale: 0.98,
         duration: 0.3,
         ease: 'power2.in',
-        onComplete: onClose
+        onComplete: () => {
+          // Restore scroll before closing
+          const scrollY = document.body.style.top;
+          document.body.style.position = '';
+          document.body.style.top = '';
+          document.body.style.width = '';
+          if (scrollY) {
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+          }
+          onClose();
+        }
       });
     } else {
       onClose();
@@ -99,102 +169,333 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
     );
   };
 
+  const handleZoomIn = () => {
+    setScale(prev => Math.min(prev + 0.1, 2.0));
+  };
+
+  const handleZoomOut = () => {
+    setScale(prev => Math.max(prev - 0.1, 0.4));
+  };
+
+  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / scale, // Normalize for zoom
+      y: (e.clientY - rect.top) / scale
+    };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!highlighterMode || !docItem) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDrawing(true);
+    const pos = getMousePos(e);
+    setCurrentStroke([pos]);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !highlighterMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const pos = getMousePos(e);
+    setCurrentStroke(prev => [...prev, pos]);
+
+    // Draw current stroke in real-time
+    const canvas = drawingCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || currentStroke.length === 0) return;
+
+    const color = highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 20;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.4;
+
+    ctx.beginPath();
+    ctx.moveTo(currentStroke[currentStroke.length - 1].x * scale, currentStroke[currentStroke.length - 1].y * scale);
+    ctx.lineTo(pos.x * scale, pos.y * scale);
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+  };
+
+  const handleMouseUp = () => {
+    if (!isDrawing || !highlighterMode || currentStroke.length < 2 || !docItem) {
+      setIsDrawing(false);
+      setCurrentStroke([]);
+      return;
+    }
+
+    const newStroke: DrawingStroke = {
+      id: `stroke_${Date.now()}`,
+      documentId: docItem.id, // Associate with current document
+      pageNumber: 1, // For multi-page support, track actual page
+      color: highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5',
+      points: currentStroke,
+      lineWidth: 20
+    };
+
+    const newDrawings = [...drawings, newStroke];
+    setDrawings(newDrawings);
+
+    // Update history
+    const newHistory = drawingHistory.slice(0, historyIndex + 1);
+    newHistory.push(newDrawings);
+    setDrawingHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+
+    setIsDrawing(false);
+    setCurrentStroke([]);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      setHistoryIndex(historyIndex - 1);
+      setDrawings(drawingHistory[historyIndex - 1]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < drawingHistory.length - 1) {
+      setHistoryIndex(historyIndex + 1);
+      setDrawings(drawingHistory[historyIndex + 1]);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (!docItem) return;
+    
+    const newDrawings = drawings.filter(d => d.documentId !== docItem.id);
+    setDrawings(newDrawings);
+
+    const newHistory = drawingHistory.slice(0, historyIndex + 1);
+    newHistory.push(newDrawings);
+    setDrawingHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const handleDownload = () => {
+    if (docItem) {
+      const link = document.createElement('a');
+      link.href = docItem.url;
+      link.download = docItem.fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (!docItem) return null;
+
+  // Calculate dynamic highlight counts for THIS document only
+  const documentDrawings = drawings.filter(d => d.documentId === docItem.id);
+  const yellowCount = documentDrawings.filter(d => d.color === '#FDE047').length;
+  const redCount = documentDrawings.filter(d => d.color === '#FCA5A5').length;
 
   return (
     <div 
       ref={containerRef}
       className="fixed inset-0 z-50 bg-slate-900 flex flex-col md:flex-row overflow-hidden select-none"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
     >
-      {/* LEFT PANEL: PDF Viewer */}
-      <div className="flex-1 flex flex-col h-2/3 md:h-full border-r border-slate-800 bg-slate-950 relative">
+      {/* LEFT PANEL: Document Viewer */}
+      <div className="flex-1 flex flex-col h-full border-r border-slate-800 bg-slate-950 relative overflow-hidden">
+        
+        {/* Header */}
         <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-emerald-400" />
             <span className="text-xs font-bold text-slate-200 truncate max-w-md">
-              In-App Viewer: {docItem.name}
+              {docItem.name}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-full">
-              PDF Engine V2
+              Digital Highlighter • {Math.round(scale * 100)}% View
             </span>
             <button 
               onClick={handleClose}
               className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700 ml-2"
-              title="Close PDF Viewer"
+              title="Close Viewer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 w-full relative overflow-hidden bg-slate-900 flex items-center justify-center">
-          {iframeSrc ? (
-            <iframe 
-              src={iframeSrc} 
-              className="w-full h-full border-0 select-none"
-              title="PDF Document Viewer"
-            />
-          ) : (
-            <div className="text-slate-400 text-sm font-semibold">Loading document...</div>
-          )}
+        {/* Toolbar */}
+        <div className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
+          <div className="flex items-center gap-4">
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleZoomOut}
+                disabled={scale <= 0.4}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-300 min-w-[60px] text-center">
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                disabled={scale >= 2.0}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
-          {isAnnotated && activeAnnotation !== null && annotations[activeAnnotation] && (
-            <div 
-              className="absolute bg-yellow-400/25 border-2 border-yellow-400 rounded pointer-events-none z-10 shadow-lg shadow-yellow-400/10 animate-pulse transition-all duration-300"
-              style={{
-                top: annotations[activeAnnotation].coordinates.top,
-                left: annotations[activeAnnotation].coordinates.left,
-                width: '320px',
-                height: '75px',
+          <div className="flex items-center gap-3">
+            {/* Highlighter Buttons */}
+            <button
+              onClick={() => setHighlighterMode(highlighterMode === 'yellow' ? null : 'yellow')}
+              className={`px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center gap-2 text-xs font-bold border ${
+                highlighterMode === 'yellow'
+                  ? 'bg-yellow-400/20 border-yellow-400 text-yellow-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Yellow Highlighter - Important"
+            >
+              <Highlighter className="w-4 h-4" />
+              <span className="w-4 h-4 rounded bg-yellow-400"></span>
+            </button>
+
+            <button
+              onClick={() => setHighlighterMode(highlighterMode === 'red' ? null : 'red')}
+              className={`px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center gap-2 text-xs font-bold border ${
+                highlighterMode === 'red'
+                  ? 'bg-red-400/20 border-red-400 text-red-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Red Highlighter - Alert"
+            >
+              <Highlighter className="w-4 h-4" />
+              <span className="w-4 h-4 rounded bg-red-400"></span>
+            </button>
+
+            {/* Clear All */}
+            <button
+              onClick={handleClearAll}
+              disabled={documentDrawings.length === 0}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Clear All Highlights"
+            >
+              <Eraser className="w-4 h-4" />
+            </button>
+
+            {/* Undo/Redo */}
+            <div className="flex items-center gap-2 border-l border-slate-700 pl-3">
+              <button
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
+                title="Undo"
+              >
+                <Undo className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleRedo}
+                disabled={historyIndex >= drawingHistory.length - 1}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
+                title="Redo"
+              >
+                <Redo className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Download */}
+            <button
+              onClick={handleDownload}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700"
+              title="Download Document"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Document Canvas - FIXED SCROLL CONTAINER */}
+        <div 
+          ref={viewerScrollRef}
+          className="flex-1 w-full relative overflow-auto bg-slate-900 flex justify-center items-start p-8"
+          style={{ 
+            overflowY: 'auto',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          <div 
+            className="relative" 
+            style={{ 
+              transform: `scale(${scale})`, 
+              transformOrigin: 'top center',
+              transition: 'transform 0.2s ease-out'
+            }}
+          >
+            {/* Document iframe */}
+            <iframe
+              ref={iframeRef}
+              src={`${docItem.url}#view=FitH`}
+              className="w-[800px] h-[1100px] bg-white shadow-2xl border-0"
+              title={docItem.name}
+              onLoad={() => {
+                // Set canvas size to match iframe
+                if (drawingCanvasRef.current) {
+                  drawingCanvasRef.current.width = 800 * scale;
+                  drawingCanvasRef.current.height = 1100 * scale;
+                }
               }}
             />
-          )}
 
-          {isAnnotated && (
-            <div className="absolute top-6 left-6 max-w-sm w-full bg-slate-900/90 border border-slate-700/80 backdrop-blur-md p-4 rounded-xl shadow-2xl z-10 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-                <AlertCircle className="w-4 h-4 text-warning" />
-                <span className="text-xs font-bold text-slate-100">Review Marks & Annotations</span>
-              </div>
-              <div className="space-y-2">
-                {annotations.map((flag, idx) => (
-                  <button
-                    key={flag.id}
-                    onClick={() => {
-                      setActiveAnnotation(idx);
-                      setIframeSrc(`${docItem.url}#page=${flag.page}&view=FitH`);
-                    }}
-                    className={`w-full p-2.5 rounded-lg border text-left transition-all flex items-start gap-2 cursor-pointer ${
-                      activeAnnotation === idx 
-                        ? 'bg-warning/10 border-warning text-slate-100' 
-                        : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                      activeAnnotation === idx ? 'bg-warning text-slate-950' : 'bg-slate-700 text-slate-300'
-                    }`}>
-                      {flag.page}
-                    </span>
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-200 leading-tight">{flag.title}</p>
-                      {activeAnnotation === idx && (
-                        <p className="text-[10px] text-slate-350 mt-1.5 leading-relaxed font-medium">
-                          {flag.description}
-                        </p>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
+            {/* Drawing Canvas Overlay - ZOOM-AWARE */}
+            <canvas
+              ref={drawingCanvasRef}
+              width={800 * scale}
+              height={1100 * scale}
+              className="absolute top-0 left-0 pointer-events-auto"
+              style={{
+                cursor: highlighterMode ? 'crosshair' : 'default',
+                touchAction: 'none',
+                width: '800px',
+                height: '1100px'
+              }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            />
+          </div>
+
+          {/* Highlighter Mode Indicator */}
+          {highlighterMode && (
+            <div className="fixed top-24 left-8 bg-slate-900/90 border border-slate-700 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl z-20">
+              <p className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                <Highlighter className="w-4 h-4" />
+                <span className={`w-3 h-3 rounded-full ${highlighterMode === 'yellow' ? 'bg-yellow-400' : 'bg-red-400'}`}></span>
+                {highlighterMode === 'yellow' ? 'Yellow Highlighter Active' : 'Red Highlighter Active'}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">Click and drag to highlight</p>
             </div>
           )}
         </div>
       </div>
 
       {/* RIGHT PANEL: Comments or Metadata */}
-      <div className="w-full md:w-96 bg-white flex flex-col justify-between h-1/3 md:h-full border-t md:border-t-0 border-slate-200">
+      <div className="w-full md:w-96 bg-white flex flex-col justify-between h-full border-t md:border-t-0 border-slate-200 overflow-hidden">
         
         {isAnnotated ? (
           <>
@@ -318,19 +619,15 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               </div>
 
               <div className="border-t border-slate-100 pt-5 space-y-4">
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">SEBI Formatting Checklist</h4>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Highlights Summary</h4>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2.5 text-xs text-slate-600">
-                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                    <span className="font-medium">Digitally signed via DSC (Passed)</span>
+                    <span className="w-4 h-4 rounded bg-yellow-400"></span>
+                    <span className="font-medium">{yellowCount} Yellow highlight{yellowCount !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-slate-600">
-                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                    <span className="font-medium">Standard A4 margins layout checked</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-xs text-slate-600">
-                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                    <span className="font-medium">Anti-virus quarantine scan (Passed)</span>
+                    <span className="w-4 h-4 rounded bg-red-400"></span>
+                    <span className="font-medium">{redCount} Red highlight{redCount !== 1 ? 's' : ''}</span>
                   </div>
                 </div>
               </div>
