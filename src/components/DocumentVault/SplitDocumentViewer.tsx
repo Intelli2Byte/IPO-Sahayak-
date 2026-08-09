@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
+import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
 import gsap from 'gsap';
 import { DocumentItem, Comment } from '@/data/mockData';
 
@@ -11,74 +11,80 @@ interface SplitDocumentViewerProps {
   onAddReply: (documentId: string, replyText: string) => void;
 }
 
-interface DrawingStroke {
+interface HighlightRect {
   id: string;
   documentId: string;
   pageNumber: number;
   color: string;
-  points: { x: number; y: number }[];
-  lineWidth: number;
+  // Normalized coordinates (0-1 range relative to page)
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export default function SplitDocumentViewer({ document: docItem, onClose, onAddReply }: SplitDocumentViewerProps) {
   const [replyText, setReplyText] = useState('');
-  const [scale, setScale] = useState<number>(0.8); // 80% default zoom
-  const [drawings, setDrawings] = useState<DrawingStroke[]>([]);
+  const [zoom, setZoom] = useState<number>(1.0); // Single source of truth: 1.0 = 100%
+  const [highlights, setHighlights] = useState<HighlightRect[]>([]);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
+  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
   const [highlighterMode, setHighlighterMode] = useState<'yellow' | 'red' | null>(null);
-  const [drawingHistory, setDrawingHistory] = useState<DrawingStroke[][]>([]);
+  const [history, setHistory] = useState<HighlightRect[][]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
-  const viewerScrollRef = useRef<HTMLDivElement>(null);
+  const pageContainerRef = useRef<HTMLDivElement>(null);
+  const highlightLayerRef = useRef<HTMLDivElement>(null);
   
   const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
 
-  // Load drawings from localStorage (document-specific)
+  // PDF page dimensions (standard A4 at 72 DPI)
+  const PAGE_WIDTH = 595;
+  const PAGE_HEIGHT = 842;
+
+  // Load highlights from localStorage (document-specific)
   useEffect(() => {
     if (docItem) {
-      const stored = localStorage.getItem(`drawings_${docItem.id}`);
+      const stored = localStorage.getItem(`highlights_${docItem.id}`);
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          // Filter to ensure only this document's highlights
-          const documentDrawings = parsed.filter((d: DrawingStroke) => d.documentId === docItem.id);
-          setDrawings(documentDrawings);
-          setDrawingHistory([documentDrawings]);
+          const documentHighlights = parsed.filter((h: HighlightRect) => h.documentId === docItem.id);
+          setHighlights(documentHighlights);
+          setHistory([documentHighlights]);
           setHistoryIndex(0);
         } catch (e) {
-          console.error('Failed to parse drawings', e);
-          setDrawings([]);
-          setDrawingHistory([[]]);
+          console.error('Failed to parse highlights', e);
+          setHighlights([]);
+          setHistory([[]]);
           setHistoryIndex(0);
         }
       } else {
-        // No stored drawings for this document
-        setDrawings([]);
-        setDrawingHistory([[]]);
+        setHighlights([]);
+        setHistory([[]]);
         setHistoryIndex(0);
       }
     }
   }, [docItem?.id]);
 
-  // Save drawings to localStorage (document-specific)
+  // Save highlights to localStorage
   useEffect(() => {
     if (docItem) {
-      localStorage.setItem(`drawings_${docItem.id}`, JSON.stringify(drawings));
+      localStorage.setItem(`highlights_${docItem.id}`, JSON.stringify(highlights));
     }
-  }, [drawings, docItem?.id]);
+  }, [highlights, docItem?.id]);
 
-  // Entrance animation WITHOUT scrolling to top
+  // Prevent body scroll when modal opens
   useEffect(() => {
     if (docItem && containerRef.current) {
-      // Prevent body scroll during modal open
       const scrollY = window.scrollY;
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
 
       gsap.fromTo(containerRef.current,
         { opacity: 0, scale: 0.98 },
@@ -86,51 +92,17 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
       );
     }
 
-    // Cleanup: restore scroll position
     return () => {
       const scrollY = document.body.style.top;
       document.body.style.position = '';
       document.body.style.top = '';
       document.body.style.width = '';
+      document.body.style.overflow = '';
       if (scrollY) {
         window.scrollTo(0, parseInt(scrollY || '0') * -1);
       }
     };
   }, [docItem]);
-
-  // Redraw canvas when drawings change
-  useEffect(() => {
-    if (drawingCanvasRef.current) {
-      const canvas = drawingCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw all strokes for this document
-      const documentDrawings = drawings.filter(d => d.documentId === docItem?.id);
-      documentDrawings.forEach(stroke => {
-        if (stroke.points.length < 2) return;
-
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.lineWidth;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.globalAlpha = 0.4;
-
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        
-        for (let i = 1; i < stroke.points.length; i++) {
-          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-        }
-        
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-      });
-    }
-  }, [drawings, docItem?.id]);
 
   const handleClose = () => {
     if (containerRef.current) {
@@ -140,11 +112,11 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         duration: 0.3,
         ease: 'power2.in',
         onComplete: () => {
-          // Restore scroll before closing
           const scrollY = document.body.style.top;
           document.body.style.position = '';
           document.body.style.top = '';
           document.body.style.width = '';
+          document.body.style.overflow = '';
           if (scrollY) {
             window.scrollTo(0, parseInt(scrollY || '0') * -1);
           }
@@ -170,115 +142,125 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   };
 
   const handleZoomIn = () => {
-    setScale(prev => Math.min(prev + 0.1, 2.0));
+    setZoom(prev => Math.min(prev + 0.1, 2.0));
   };
 
   const handleZoomOut = () => {
-    setScale(prev => Math.max(prev - 0.1, 0.4));
+    setZoom(prev => Math.max(prev - 0.1, 0.5));
   };
 
-  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = drawingCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) / scale, // Normalize for zoom
-      y: (e.clientY - rect.top) / scale
-    };
+  const handleZoomReset = () => {
+    setZoom(1.0);
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Convert mouse event to normalized page coordinates (0-1 range)
+  const getPageCoordinates = (e: React.MouseEvent): { x: number; y: number } | null => {
+    if (!pageContainerRef.current) return null;
+
+    const rect = pageContainerRef.current.getBoundingClientRect();
+    
+    // Get mouse position relative to page container
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Normalize to 0-1 range (independent of zoom)
+    const normalizedX = mouseX / rect.width;
+    const normalizedY = mouseY / rect.height;
+
+    return { x: normalizedX, y: normalizedY };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
     if (!highlighterMode || !docItem) return;
 
     e.preventDefault();
     e.stopPropagation();
-    
+
+    const coords = getPageCoordinates(e);
+    if (!coords) return;
+
     setIsDrawing(true);
-    const pos = getMousePos(e);
-    setCurrentStroke([pos]);
+    setStartPoint(coords);
+    setCurrentPoint(coords);
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !highlighterMode) return;
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDrawing || !highlighterMode || !startPoint) return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    const pos = getMousePos(e);
-    setCurrentStroke(prev => [...prev, pos]);
+    const coords = getPageCoordinates(e);
+    if (!coords) return;
 
-    // Draw current stroke in real-time
-    const canvas = drawingCanvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || currentStroke.length === 0) return;
-
-    const color = highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 20;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.4;
-
-    ctx.beginPath();
-    ctx.moveTo(currentStroke[currentStroke.length - 1].x * scale, currentStroke[currentStroke.length - 1].y * scale);
-    ctx.lineTo(pos.x * scale, pos.y * scale);
-    ctx.stroke();
-    ctx.globalAlpha = 1.0;
+    setCurrentPoint(coords);
   };
 
   const handleMouseUp = () => {
-    if (!isDrawing || !highlighterMode || currentStroke.length < 2 || !docItem) {
+    if (!isDrawing || !highlighterMode || !startPoint || !currentPoint || !docItem) {
       setIsDrawing(false);
-      setCurrentStroke([]);
+      setStartPoint(null);
+      setCurrentPoint(null);
       return;
     }
 
-    const newStroke: DrawingStroke = {
-      id: `stroke_${Date.now()}`,
-      documentId: docItem.id, // Associate with current document
-      pageNumber: 1, // For multi-page support, track actual page
-      color: highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5',
-      points: currentStroke,
-      lineWidth: 20
-    };
+    // Calculate rectangle (handle all drag directions)
+    const x = Math.min(startPoint.x, currentPoint.x);
+    const y = Math.min(startPoint.y, currentPoint.y);
+    const width = Math.abs(currentPoint.x - startPoint.x);
+    const height = Math.abs(currentPoint.y - startPoint.y);
 
-    const newDrawings = [...drawings, newStroke];
-    setDrawings(newDrawings);
+    // Only create highlight if it has meaningful size
+    if (width > 0.01 && height > 0.01) {
+      const newHighlight: HighlightRect = {
+        id: `highlight_${Date.now()}`,
+        documentId: docItem.id,
+        pageNumber: 1,
+        color: highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5',
+        x,
+        y,
+        width,
+        height
+      };
 
-    // Update history
-    const newHistory = drawingHistory.slice(0, historyIndex + 1);
-    newHistory.push(newDrawings);
-    setDrawingHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+      const newHighlights = [...highlights, newHighlight];
+      setHighlights(newHighlights);
+
+      // Update history
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(newHighlights);
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
 
     setIsDrawing(false);
-    setCurrentStroke([]);
+    setStartPoint(null);
+    setCurrentPoint(null);
   };
 
   const handleUndo = () => {
     if (historyIndex > 0) {
       setHistoryIndex(historyIndex - 1);
-      setDrawings(drawingHistory[historyIndex - 1]);
+      setHighlights(history[historyIndex - 1]);
     }
   };
 
   const handleRedo = () => {
-    if (historyIndex < drawingHistory.length - 1) {
+    if (historyIndex < history.length - 1) {
       setHistoryIndex(historyIndex + 1);
-      setDrawings(drawingHistory[historyIndex + 1]);
+      setHighlights(history[historyIndex + 1]);
     }
   };
 
   const handleClearAll = () => {
     if (!docItem) return;
     
-    const newDrawings = drawings.filter(d => d.documentId !== docItem.id);
-    setDrawings(newDrawings);
+    const newHighlights = highlights.filter(h => h.documentId !== docItem.id);
+    setHighlights(newHighlights);
 
-    const newHistory = drawingHistory.slice(0, historyIndex + 1);
-    newHistory.push(newDrawings);
-    setDrawingHistory(newHistory);
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newHighlights);
+    setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
   };
 
@@ -297,9 +279,20 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   if (!docItem) return null;
 
   // Calculate dynamic highlight counts for THIS document only
-  const documentDrawings = drawings.filter(d => d.documentId === docItem.id);
-  const yellowCount = documentDrawings.filter(d => d.color === '#FDE047').length;
-  const redCount = documentDrawings.filter(d => d.color === '#FCA5A5').length;
+  const documentHighlights = highlights.filter(h => h.documentId === docItem.id);
+  const yellowCount = documentHighlights.filter(h => h.color === '#FDE047').length;
+  const redCount = documentHighlights.filter(h => h.color === '#FCA5A5').length;
+
+  // Calculate current drag rectangle (normalized coordinates)
+  let dragRect: { x: number; y: number; width: number; height: number } | null = null;
+  if (isDrawing && startPoint && currentPoint) {
+    dragRect = {
+      x: Math.min(startPoint.x, currentPoint.x),
+      y: Math.min(startPoint.y, currentPoint.y),
+      width: Math.abs(currentPoint.x - startPoint.x),
+      height: Math.abs(currentPoint.y - startPoint.y)
+    };
+  }
 
   return (
     <div 
@@ -320,7 +313,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-full">
-              Digital Highlighter • {Math.round(scale * 100)}% View
+              Digital Highlighter • {Math.round(zoom * 100)}% View
             </span>
             <button 
               onClick={handleClose}
@@ -339,18 +332,22 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
             <div className="flex items-center gap-2">
               <button
                 onClick={handleZoomOut}
-                disabled={scale <= 0.4}
+                disabled={zoom <= 0.5}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
                 title="Zoom Out"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
-              <span className="text-xs font-bold text-slate-300 min-w-[60px] text-center">
-                {Math.round(scale * 100)}%
-              </span>
+              <button
+                onClick={handleZoomReset}
+                className="text-xs font-bold text-slate-300 min-w-[60px] text-center px-2 py-1 hover:bg-slate-800 rounded cursor-pointer"
+                title="Reset to 100%"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
               <button
                 onClick={handleZoomIn}
-                disabled={scale >= 2.0}
+                disabled={zoom >= 2.0}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
                 title="Zoom In"
               >
@@ -390,7 +387,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
             {/* Clear All */}
             <button
               onClick={handleClearAll}
-              disabled={documentDrawings.length === 0}
+              disabled={documentHighlights.length === 0}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
               title="Clear All Highlights"
             >
@@ -409,7 +406,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               </button>
               <button
                 onClick={handleRedo}
-                disabled={historyIndex >= drawingHistory.length - 1}
+                disabled={historyIndex >= history.length - 1}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
                 title="Redo"
               >
@@ -428,56 +425,82 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
           </div>
         </div>
 
-        {/* Document Canvas - FIXED SCROLL CONTAINER */}
-        <div 
-          ref={viewerScrollRef}
-          className="flex-1 w-full relative overflow-auto bg-slate-900 flex justify-center items-start p-8"
-          style={{ 
-            overflowY: 'auto',
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch'
-          }}
-        >
+        {/* Document Canvas - PROPER COORDINATE SYSTEM */}
+        <div className="flex-1 w-full relative overflow-auto bg-slate-900 flex justify-center items-start p-8">
           <div 
-            className="relative" 
-            style={{ 
-              transform: `scale(${scale})`, 
-              transformOrigin: 'top center',
-              transition: 'transform 0.2s ease-out'
+            ref={pageContainerRef}
+            className="relative bg-white shadow-2xl"
+            style={{
+              width: `${PAGE_WIDTH * zoom}px`,
+              height: `${PAGE_HEIGHT * zoom}px`,
+              position: 'relative'
             }}
           >
-            {/* Document iframe */}
+            {/* PDF iframe */}
             <iframe
               ref={iframeRef}
-              src={`${docItem.url}#view=FitH`}
-              className="w-[800px] h-[1100px] bg-white shadow-2xl border-0"
+              src={`${docItem.url}#view=FitH&zoom=${Math.round(zoom * 100)}`}
+              className="absolute inset-0 w-full h-full border-0"
               title={docItem.name}
-              onLoad={() => {
-                // Set canvas size to match iframe
-                if (drawingCanvasRef.current) {
-                  drawingCanvasRef.current.width = 800 * scale;
-                  drawingCanvasRef.current.height = 1100 * scale;
-                }
-              }}
+              style={{ pointerEvents: highlighterMode ? 'none' : 'auto' }}
             />
 
-            {/* Drawing Canvas Overlay - ZOOM-AWARE */}
-            <canvas
-              ref={drawingCanvasRef}
-              width={800 * scale}
-              height={1100 * scale}
-              className="absolute top-0 left-0 pointer-events-auto"
-              style={{
-                cursor: highlighterMode ? 'crosshair' : 'default',
-                touchAction: 'none',
-                width: '800px',
-                height: '1100px'
-              }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
+            {/* Highlight Layer - PERFECTLY ALIGNED */}
+            <div
+              ref={highlightLayerRef}
+              className="absolute inset-0 pointer-events-none"
+              style={{ overflow: 'hidden' }}
+            >
+              {/* Existing highlights */}
+              {documentHighlights.map((highlight) => (
+                <div
+                  key={highlight.id}
+                  className="absolute"
+                  style={{
+                    left: `${highlight.x * 100}%`,
+                    top: `${highlight.y * 100}%`,
+                    width: `${highlight.width * 100}%`,
+                    height: `${highlight.height * 100}%`,
+                    backgroundColor: highlight.color,
+                    opacity: 0.4,
+                    pointerEvents: 'none'
+                  }}
+                />
+              ))}
+
+              {/* Current drag preview */}
+              {dragRect && (
+                <div
+                  className="absolute"
+                  style={{
+                    left: `${dragRect.x * 100}%`,
+                    top: `${dragRect.y * 100}%`,
+                    width: `${dragRect.width * 100}%`,
+                    height: `${dragRect.height * 100}%`,
+                    backgroundColor: highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5',
+                    opacity: 0.4,
+                    border: `2px dashed ${highlighterMode === 'yellow' ? '#FDE047' : '#FCA5A5'}`,
+                    pointerEvents: 'none'
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Interaction Layer - CAPTURES MOUSE EVENTS */}
+            {highlighterMode && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  cursor: 'crosshair',
+                  pointerEvents: 'auto',
+                  zIndex: 10
+                }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              />
+            )}
           </div>
 
           {/* Highlighter Mode Indicator */}
@@ -494,7 +517,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         </div>
       </div>
 
-      {/* RIGHT PANEL: Comments or Metadata */}
+      {/* RIGHT PANEL: Metadata (unchanged) */}
       <div className="w-full md:w-96 bg-white flex flex-col justify-between h-full border-t md:border-t-0 border-slate-200 overflow-hidden">
         
         {isAnnotated ? (
