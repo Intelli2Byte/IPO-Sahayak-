@@ -344,3 +344,56 @@ next-route-announcer,
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
+
+/* Enhanced form field styles */
+.counter-btn {
+  @apply flex items-center justify-center w-10 h-10 rounded-lg border-2 border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm font-bold text-slate-700;
+}
+
+.locked-field {
+  @apply relative bg-emerald-50 border-2 border-emerald-300 rounded-lg px-4 py-3 min-h-[44px] flex items-center;
+}
+
+.locked-watermark {
+  @apply absolute top-1 right-2 text-[8px] font-black uppercase tracking-widest text-emerald-600/40;
+}
+
+/* Improved input focus states */
+input:focus,
+select:focus,
+textarea:focus {
+  @apply ring-2 ring-blue-500 ring-offset-1 border-blue-400 outline-none;
+}
+
+/* Better disabled state */
+input:disabled,
+select:disabled,
+textarea:disabled {
+  @apply cursor-not-allowed opacity-70;
+}
+
+/* Promoter card enhancement */
+.promoter-card {
+  @apply rounded-xl bg-gradient-to-br from-slate-50 to-blue-50 p-6;
+}
+
+/* Ledger summary enhancement */
+.ledger-summary {
+  @apply rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 p-6 flex items-center justify-between;
+}
+
+.ledger-label {
+  @apply block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1;
+}
+
+.ledger-value {
+  @apply block font-black text-slate-900;
+}
+
+.ledger-tag-success {
+  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wide;
+}
+
+.ledger-tag-error {
+  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-100 text-red-800 text-xs font-bold uppercase tracking-wide;
+}
