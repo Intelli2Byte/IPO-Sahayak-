@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
 import gsap from 'gsap';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { DocumentItem, Comment } from '@/data/mockData';
 
 interface SplitDocumentViewerProps {
@@ -33,6 +34,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   const [highlighterMode, setHighlighterMode] = useState<'yellow' | 'red' | null>(null);
   const [history, setHistory] = useState<HighlightRect[][]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -41,7 +43,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   
   const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
 
-  // PDF page dimensions (standard A4 at 72 DPI)
+  // PDF page dimensions (standard A4 at 72 DPI - PDF points)
   const PAGE_WIDTH = 595;
   const PAGE_HEIGHT = 842;
 
@@ -264,15 +266,115 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
     setHistoryIndex(newHistory.length - 1);
   };
 
-  const handleDownload = () => {
-    if (docItem) {
+  // Export PDF with highlights
+  const handleDownloadWithHighlights = async () => {
+    if (!docItem) return;
+
+    setIsExporting(true);
+
+    try {
+      // Fetch original PDF
+      const response = await fetch(docItem.url);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Load PDF document
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const pages = pdfDoc.getPages();
+
+      // Get document-specific highlights
+      const documentHighlights = highlights.filter(h => h.documentId === docItem.id);
+
+      // Group highlights by page
+      const highlightsByPage = documentHighlights.reduce((acc, highlight) => {
+        const pageIndex = highlight.pageNumber - 1; // Convert to 0-based index
+        if (!acc[pageIndex]) {
+          acc[pageIndex] = [];
+        }
+        acc[pageIndex].push(highlight);
+        return acc;
+      }, {} as Record<number, HighlightRect[]>);
+
+      // Draw highlights on each page
+      Object.entries(highlightsByPage).forEach(([pageIndexStr, pageHighlights]) => {
+        const pageIndex = parseInt(pageIndexStr);
+        if (pageIndex >= 0 && pageIndex < pages.length) {
+          const page = pages[pageIndex];
+          const { width: pageWidth, height: pageHeight } = page.getSize();
+
+          pageHighlights.forEach((highlight) => {
+            // Convert normalized coordinates (0-1) to PDF points
+            const x = highlight.x * pageWidth;
+            const y = highlight.y * pageHeight;
+            const width = highlight.width * pageWidth;
+            const height = highlight.height * pageHeight;
+
+            // PDF coordinate system: origin at bottom-left
+            // Browser coordinate system: origin at top-left
+            // Convert Y coordinate
+            const pdfY = pageHeight - y - height;
+
+            // Parse color
+            let color = rgb(1, 1, 0); // Default yellow
+            if (highlight.color === '#FDE047') {
+              color = rgb(0.992, 0.878, 0.278); // Yellow
+            } else if (highlight.color === '#FCA5A5') {
+              color = rgb(0.988, 0.647, 0.647); // Red
+            }
+
+            // Draw semi-transparent rectangle
+            page.drawRectangle({
+              x,
+              y: pdfY,
+              width,
+              height,
+              color,
+              opacity: 0.4,
+              borderWidth: 0
+            });
+          });
+        }
+      });
+
+      // Save modified PDF
+      const pdfBytes = await pdfDoc.save();
+
+// Create download — wrap bytes to satisfy BlobPart's ArrayBuffer typing
+const blob = new Blob([new Uint8Array(pdfBytes)], {
+  type: 'application/pdf'
+});
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = docItem.url;
-      link.download = docItem.fileName;
-      link.target = '_blank';
+      link.href = url;
+      
+      // Generate filename
+      const originalName = docItem.fileName.replace(/\.pdf$/i, '');
+      link.download = `${originalName}-highlighted.pdf`;
+      
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Show success message
+      gsap.fromTo('.export-success',
+        { opacity: 0, y: -20 },
+        { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }
+      );
+
+      setTimeout(() => {
+        gsap.to('.export-success', {
+          opacity: 0,
+          y: -20,
+          duration: 0.3,
+          ease: 'power2.in'
+        });
+      }, 3000);
+
+    } catch (error) {
+      console.error('Failed to export PDF with highlights:', error);
+      alert('Failed to export PDF with highlights. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -300,6 +402,12 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
       className="fixed inset-0 z-50 bg-slate-900 flex flex-col md:flex-row overflow-hidden select-none"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
     >
+      {/* Export Success Message */}
+      <div className="export-success fixed top-20 left-1/2 transform -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-50 opacity-0 flex items-center gap-2">
+        <CheckCircle2 className="w-5 h-5" />
+        <span className="font-bold text-sm">PDF with highlights downloaded successfully!</span>
+      </div>
+
       {/* LEFT PANEL: Document Viewer */}
       <div className="flex-1 flex flex-col h-full border-r border-slate-800 bg-slate-950 relative overflow-hidden">
         
@@ -414,13 +522,15 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
               </button>
             </div>
 
-            {/* Download */}
+            {/* Download with Highlights */}
             <button
-              onClick={handleDownload}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700"
-              title="Download Document"
+              onClick={handleDownloadWithHighlights}
+              disabled={isExporting}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer transition-all border border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-xs font-bold"
+              title="Download PDF with Highlights"
             >
               <Download className="w-4 h-4" />
+              {isExporting ? 'Exporting...' : 'Download'}
             </button>
           </div>
         </div>
@@ -517,7 +627,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         </div>
       </div>
 
-      {/* RIGHT PANEL: Metadata (unchanged) */}
+      {/* RIGHT PANEL: Metadata (unchanged from previous version) */}
       <div className="w-full md:w-96 bg-white flex flex-col justify-between h-full border-t md:border-t-0 border-slate-200 overflow-hidden">
         
         {isAnnotated ? (
