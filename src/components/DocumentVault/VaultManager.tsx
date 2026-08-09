@@ -9,13 +9,11 @@ import {
   Download, 
   MessageSquare, 
   FileText,
-  Clock,
-  AlertCircle,
   X,
   FileCheck
 } from 'lucide-react';
 import gsap from 'gsap';
-import { mockDocumentVault, DocumentCategory, DocumentItem, Comment } from '@/data/mockData';
+import { mockDocumentVault, DocumentCategory, DocumentItem, Comment, mockUserProfile } from '@/data/mockData';
 import SplitDocumentViewer from './SplitDocumentViewer';
 
 export default function VaultManager() {
@@ -24,17 +22,19 @@ export default function VaultManager() {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['cat_financial']);
   const [activeCommentDoc, setActiveCommentDoc] = useState<DocumentItem | null>(null);
   
-  // Drag and Drop simulation states
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
-
-  // Toast Notification states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
   const toastRef = useRef<HTMLDivElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Re-calculate vault summaries whenever categories list updates
+  // Get current user from profile
+  const currentUser = mockUserProfile.fullName;
+
+  // Re-calculate vault summaries
   useEffect(() => {
     const totalRequired = categories.reduce((acc, curr) => acc + curr.required, 0);
     const totalUploaded = categories.reduce((acc, curr) => acc + curr.uploaded, 0);
@@ -56,19 +56,15 @@ export default function VaultManager() {
     });
   }, [categories]);
 
-  // Trigger Toast message slide-in animation
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       if (toastRef.current) {
-        // Slide in from top-right
         const tl = gsap.timeline();
         tl.fromTo(toastRef.current,
           { x: 400, opacity: 0, rotation: 5 },
           { x: 0, opacity: 1, rotation: 0, duration: 0.5, ease: 'back.out(1.4)' }
         );
-        
-        // Progress bar timer animation
         gsap.fromTo('.toast-timer',
           { width: '100%' },
           { width: '0%', duration: 4.5, ease: 'linear' }
@@ -76,7 +72,6 @@ export default function VaultManager() {
       }
     }, 50);
 
-    // Auto dismiss after 5s
     setTimeout(() => {
       dismissToast();
     }, 5000);
@@ -96,7 +91,6 @@ export default function VaultManager() {
     }
   };
 
-  // Expand / collapse accordions
   const toggleCategory = (catId: string) => {
     setExpandedCategories(prev => {
       const isExpanded = prev.includes(catId);
@@ -104,7 +98,6 @@ export default function VaultManager() {
       const arrowIcon = document.getElementById(`acc-arrow-${catId}`);
       
       if (isExpanded) {
-        // Collapse
         if (accordionBody) {
           gsap.to(accordionBody, { height: 0, opacity: 0, duration: 0.35, ease: 'power2.inOut' });
         }
@@ -113,7 +106,6 @@ export default function VaultManager() {
         }
         return prev.filter(id => id !== catId);
       } else {
-        // Expand
         if (accordionBody) {
           gsap.set(accordionBody, { height: 'auto' });
           const fullHeight = accordionBody.clientHeight;
@@ -126,7 +118,6 @@ export default function VaultManager() {
           gsap.to(arrowIcon, { rotation: 180, duration: 0.3 });
         }
         
-        // Stagger list elements inside
         setTimeout(() => {
           const items = accordionBody?.querySelectorAll('.doc-row-anim');
           if (items && items.length > 0) {
@@ -142,7 +133,6 @@ export default function VaultManager() {
     });
   };
 
-  // Drag and Drop Action handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -156,7 +146,6 @@ export default function VaultManager() {
     e.preventDefault();
     setIsDragging(false);
 
-    // Drop physical scale bounce effect
     if (dropZoneRef.current) {
       gsap.fromTo(dropZoneRef.current,
         { scale: 0.96 },
@@ -166,19 +155,23 @@ export default function VaultManager() {
 
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      simulateUpload(file.name, file.size);
+      uploadDocument(file);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      simulateUpload(file.name, file.size);
+      uploadDocument(file);
+    }
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
-  const simulateUpload = (fileName: string, fileSize: number) => {
-    setUploadingFileName(fileName);
+  const uploadDocument = async (file: File) => {
+    setUploadingFileName(file.name);
     setUploadProgress(0);
 
     const progressObj = { value: 0 };
@@ -189,23 +182,23 @@ export default function VaultManager() {
       onUpdate: () => {
         setUploadProgress(Math.round(progressObj.value));
       },
-      onComplete: () => {
-        // Create document object
+      onComplete: async () => {
+        // Create document object with current user
         const newDoc: DocumentItem = {
           id: `doc_${Date.now()}`,
-          name: fileName.replace(/\.[^/.]+$/, "").replace(/_/g, ' '),
-          fileName: fileName,
-          fileSize: fileSize || 356 * 1024,
-          fileType: 'application/pdf',
+          name: file.name.replace(/\.[^/.]+$/, "").replace(/_/g, ' '),
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
           uploadedAt: new Date().toISOString(),
-          uploadedBy: 'Rajesh Kumar',
+          uploadedBy: currentUser, // Use logged-in user
           status: 'pending',
           version: 1,
           comments: [],
-          url: '#'
+          url: `/uploads/documents/${file.name}` // Direct file path
         };
 
-        // Append to Financial category by default for prototype simulation
+        // Append to Financial category by default
         setCategories(prev => {
           return prev.map(cat => {
             if (cat.id === 'cat_financial') {
@@ -220,7 +213,7 @@ export default function VaultManager() {
           });
         });
 
-        triggerToast(`File "${fileName}" uploaded to Financial Vault.`);
+        triggerToast(`File "${file.name}" uploaded successfully by ${currentUser}.`);
         
         setTimeout(() => {
           setUploadProgress(null);
@@ -230,31 +223,25 @@ export default function VaultManager() {
     });
   };
 
-  // Real PDF download generation trick
-  const triggerDownload = (fileName: string) => {
+  const triggerDownload = (fileName: string, fileUrl: string) => {
     triggerToast(`Starting download: ${fileName}`);
     try {
-      // Build a simple 1-page valid PDF header structure
-      const pdfString = `%PDF-1.4\n%âãÏÓ\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 56 >>\nstream\nBT\n/F1 12 Tf\n70 700 Td\n(SME IPO Filing Document - Neha Fashion Private Limited) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f\n0000000015 00000 n\n0000000068 00000 n\n0000000125 00000 n\n0000000232 00000 n\ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n341\n%%EOF`;
-      const blob = new Blob([pdfString], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+      link.href = fileUrl;
+      link.download = fileName;
+      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Mock download trigger failed', err);
+      console.error('Download failed', err);
     }
   };
 
-  // Reply submission from Split Viewer
   const handleAddReply = (documentId: string, replyText: string) => {
     const newComment: Comment = {
       id: `comment_${Date.now()}`,
-      author: 'Rajesh Kumar (Promoter)',
+      author: `${currentUser} (Director)`,
       text: replyText,
       timestamp: new Date().toISOString(),
       type: 'reply'
@@ -268,14 +255,13 @@ export default function VaultManager() {
             if (d.id === documentId) {
               return {
                 ...d,
-                status: 'pending' as const, // Change status to pending review
+                status: 'pending' as const,
                 comments: [...d.comments, newComment]
               };
             }
             return d;
           });
 
-          // Adjust counts
           const prevDoc = cat.documents.find(d => d.id === documentId);
           let newApprovedCount = cat.approved;
           if (prevDoc?.status === 'approved') newApprovedCount--;
@@ -290,7 +276,6 @@ export default function VaultManager() {
       });
     });
 
-    // Sync active document inside viewer state
     if (activeCommentDoc && activeCommentDoc.id === documentId) {
       setActiveCommentDoc(prev => {
         if (!prev) return null;
@@ -330,7 +315,6 @@ export default function VaultManager() {
   return (
     <div className="space-y-10 pb-12 select-none">
       
-      {/* Toast Notification Container */}
       {toastMessage && (
         <div 
           ref={toastRef}
@@ -346,15 +330,12 @@ export default function VaultManager() {
           >
             <X className="w-4 h-4" />
           </button>
-          {/* Progress timer bar */}
           <div className="absolute bottom-0 left-0 h-1 bg-primary toast-timer" style={{ width: '100%' }} />
         </div>
       )}
 
-      {/* Summary Card and Upload Area Split Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Progress summary card */}
         <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-default flex flex-col justify-between">
           <div>
             <h3 className="text-lg font-bold text-slate-800">DRHP Vault Summary</h3>
@@ -394,7 +375,6 @@ export default function VaultManager() {
           </div>
         </div>
 
-        {/* Upload Drop Zone Card */}
         <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-default">
           <div className="mb-4">
             <h3 className="text-lg font-bold text-slate-800">Add Documents</h3>
@@ -431,9 +411,10 @@ export default function VaultManager() {
                 <UploadCloud className="w-14 h-14 text-slate-350 mx-auto transition-transform hover:scale-110" />
                 <div>
                   <p className="text-sm font-bold text-slate-700">Drag files here, or <span className="text-primary hover:underline">browse files</span></p>
-                  <p className="text-xs text-slate-400 mt-1.5 font-semibold">Supports PDF, JPG, PNG up to 10MB</p>
+                  <p className="text-xs text-slate-400 mt-1.5 font-semibold">Supports PDF, JPG, PNG up to 15MB</p>
                 </div>
                 <input 
+                  ref={fileInputRef}
                   type="file" 
                   accept="application/pdf,image/*" 
                   onChange={handleFileSelect} 
@@ -446,7 +427,6 @@ export default function VaultManager() {
 
       </div>
 
-      {/* Categories Accordions Lists */}
       <div className="space-y-6">
         {categories.map((category) => {
           const isExpanded = expandedCategories.includes(category.id);
@@ -457,7 +437,6 @@ export default function VaultManager() {
               key={category.id} 
               className="bg-white border border-slate-200 rounded-2xl shadow-default overflow-hidden"
             >
-              {/* Accordion Trigger Header */}
               <button
                 onClick={() => toggleCategory(category.id)}
                 className="w-full px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-left cursor-pointer"
@@ -481,7 +460,6 @@ export default function VaultManager() {
                 />
               </button>
 
-              {/* Accordion Body */}
               <div 
                 id={`acc-body-${category.id}`}
                 className={`overflow-hidden border-t border-slate-100 ${isExpanded ? 'h-auto opacity-100' : 'h-0 opacity-0'}`}
@@ -514,7 +492,7 @@ export default function VaultManager() {
                               </span>
                             </td>
                             <td className="py-5 font-semibold text-slate-500 text-sm">
-                              {(doc.fileSize / 1024).toFixed(0)} KB • PDF
+                              {(doc.fileSize / 1024).toFixed(0)} KB • {doc.fileType.includes('pdf') ? 'PDF' : 'IMG'}
                             </td>
                             <td className="py-5 text-center">
                               {getStatusBadge(doc.status)}
@@ -530,7 +508,6 @@ export default function VaultManager() {
                                     <span>Resolve Comments ({doc.comments.length})</span>
                                   </button>
                                 ) : (
-                                  // Enable inline browser for non-review documents too
                                   <button
                                     onClick={() => setActiveCommentDoc(doc)}
                                     className="px-3 py-1.5 text-slate-600 hover:text-primary hover:bg-slate-50 rounded-xl border border-slate-200 cursor-pointer transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm"
@@ -539,7 +516,7 @@ export default function VaultManager() {
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => triggerDownload(doc.fileName)}
+                                  onClick={() => triggerDownload(doc.fileName, doc.url)}
                                   className="p-2 text-slate-500 hover:text-primary hover:bg-slate-50 rounded-xl cursor-pointer transition-colors border border-slate-200"
                                   title="Download Original"
                                 >
@@ -559,7 +536,6 @@ export default function VaultManager() {
         })}
       </div>
 
-      {/* Split Pane PDF Document Viewer */}
       {activeCommentDoc && (
         <SplitDocumentViewer 
           document={activeCommentDoc}
