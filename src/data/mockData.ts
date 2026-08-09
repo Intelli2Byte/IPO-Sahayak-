@@ -472,7 +472,7 @@ export const mockIpoApplication: IPOApplication = {
       userId: "usr_2026_001",
       name: "Isha Ambani",
       role: "Board of Directors",
-      permissions: ["view", "edit", "submit", "share_document"],
+      permissions: ["view", "edit", "submit", "send_document"],
     },
     {
       userId: "usr_2026_002",
