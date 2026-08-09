@@ -231,8 +231,9 @@ export default function ComplianceTracker() {
             </span>
             <h3 className="text-base font-bold text-slate-800 mt-1">Excellent Standing</h3>
             <p className="text-xs text-slate-400 max-w-[180px] leading-relaxed">
-              Your company meets 82% of SEBI Annexure and Listing compliance checks automatically.
-            </p>
+  Your company meets 86% of SEBI Annexure and Listing compliance checks automatically.
+</p>
+         
           </div>
         </div>
 
