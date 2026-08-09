@@ -472,7 +472,7 @@ export const mockIpoApplication: IPOApplication = {
       userId: "usr_2026_001",
       name: "Isha Ambani",
       role: "Board of Directors",
-      permissions: ["view", "edit", "submit"],
+      permissions: ["view", "edit", "submit", "share_document"],
     },
     {
       userId: "usr_2026_002",
@@ -1176,9 +1176,6 @@ export const mockDocumentVault: DocumentVault = {
     },
   ],
 
-  // =========================
-  // UPDATED SUMMARY
-  // =========================
   summary: {
     totalRequired: 35,
     totalUploaded: 30,
@@ -1191,9 +1188,6 @@ export const mockDocumentVault: DocumentVault = {
 };
 
 export const mockComplianceTracker: ComplianceTracker = {
-  // =========================
-  // UPDATED FROM 82 TO 86
-  // =========================
   overallScore: 86,
 
   categories: [
@@ -1537,3 +1531,21 @@ export const mockComplianceTracker: ComplianceTracker = {
     },
   ],
 };
+
+// ============= CURRENT USER / PERMISSION RESOLUTION =============
+// Resolves the logged-in user's permissions from the existing team
+// membership record (matched by userId), instead of hardcoding a
+// name-based check anywhere in the UI layer.
+export function getCurrentUserWithPermissions(): {
+  profile: UserProfile;
+  permissions: string[];
+} {
+  const teamRecord = mockIpoApplication.team.find(
+    (member) => member.userId === mockUserProfile.id
+  );
+
+  return {
+    profile: mockUserProfile,
+    permissions: teamRecord?.permissions ?? [],
+  };
+}
