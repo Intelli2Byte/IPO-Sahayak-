@@ -1,55 +1,24 @@
-# =========================================================
-# GITHUB LINGUIST ATTRIBUTES
-# IPO SAHAYAK
-# =========================================================
+# Python source
+*.py linguist-language=Python
+*.pyw linguist-language=Python
+*.pyi linguist-language=Python
 
-# ---------------------------------------------------------
-# DATA / DOCUMENTATION / GENERATED FILES
-# ---------------------------------------------------------
+# TypeScript
+*.ts linguist-language=TypeScript
+*.tsx linguist-language=TypeScript
 
-*.pdf linguist-vendored
-*.xlsx linguist-vendored
-*.xls linguist-vendored
+# JavaScript
+*.js linguist-language=JavaScript
+*.jsx linguist-language=JavaScript
 
+# Documentation
+*.md linguist-documentation
+
+# Assets / generated data
 *.png linguist-vendored
 *.jpg linguist-vendored
 *.jpeg linguist-vendored
 *.gif linguist-vendored
-
-*.md linguist-documentation
-
-# Dataset files
+*.pdf linguist-vendored
 *.csv linguist-vendored
-*.json linguist-vendored
-
-# ---------------------------------------------------------
-# PYTHON
-# ---------------------------------------------------------
-
-*.py linguist-language=Python
-
-# Python configuration
-*.pyw linguist-language=Python
-*.pyi linguist-language=Python
-
-# ---------------------------------------------------------
-# TYPESCRIPT
-# ---------------------------------------------------------
-
-*.ts linguist-language=TypeScript
-*.tsx linguist-language=TypeScript
-
-# ---------------------------------------------------------
-# JAVASCRIPT
-# ---------------------------------------------------------
-
-*.js linguist-language=JavaScript
-*.jsx linguist-language=JavaScript
-
-# ---------------------------------------------------------
-# STYLESHEETS
-# ---------------------------------------------------------
-
-*.css linguist-documentation
-*.scss linguist-documentation
-*.sass linguist-documentation
+*.xlsx linguist-vendored

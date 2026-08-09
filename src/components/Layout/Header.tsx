@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bell, ChevronDown, Calendar, Search, LogOut, Settings, User, Languages, Loader2, Info, X } from 'lucide-react';
 import gsap from 'gsap';
-import { useLanguage } from '@/context/LanguageContext'; // <-- Imported Language Context
+import { useLanguage } from '@/context/LanguageContext';
 import { mockUserProfile, mockDashboardStats } from '@/data/mockData';
 
 interface HeaderProps {
@@ -13,6 +13,7 @@ interface HeaderProps {
   onLogout: () => void;
   onMyProfileClick: () => void;
   onSettingsClick: () => void;
+  companyName?: string; // <-- ADDED PROP
 }
 
 export default function Header({ 
@@ -21,7 +22,8 @@ export default function Header({
   onMenuToggle,
   onLogout,
   onMyProfileClick,
-  onSettingsClick
+  onSettingsClick,
+  companyName = "Loading Company Data..." // <-- DEFAULT FALLBACK
 }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -30,12 +32,8 @@ export default function Header({
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
 
-  // Consume language context
   const { language, toggleLanguage, isTranslating, t, preRegister, showBanner, bannerMessage, dismissBanner } = useLanguage();
 
-  // Pre-register text that only renders conditionally (dropdown is closed
-  // by default) so it's translated the FIRST time the user toggles,
-  // not only after they've opened the dropdown once.
   useEffect(() => {
     preRegister([
       'Notifications',
@@ -51,11 +49,11 @@ export default function Header({
       'Document Vault',
       'Compliance Checklist',
       'Team & Access Management',
+      'Generated Documents',
       'Dashboard',
     ]);
   }, [preRegister]);
 
-  // Outside click listener to dismiss dropdowns
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
@@ -70,36 +68,28 @@ export default function Header({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Tab Title mapper
   const getTabTitle = (tab: string) => {
     switch (tab) {
       case 'overview': return 'IPO Dashboard';
       case 'wizard': return 'IPO Application Wizard';
       case 'vault': return 'Document Vault';
       case 'compliance': return 'Compliance Checklist';
+      case 'generated': return 'Generated Documents';
       case 'team': return 'Team & Access Management';
       default: return 'Dashboard';
     }
   };
 
-  // Bell hover micro-interaction (Bounce)
   const animateBell = () => {
     const bell = bellRef.current?.querySelector('.bell-icon');
     if (bell) {
       gsap.fromTo(bell, 
         { scale: 1 }, 
-        { 
-          scale: 1.25, 
-          duration: 0.4, 
-          ease: 'elastic.out(1, 0.4)', 
-          yoyo: true, 
-          repeat: 1 
-        }
+        { scale: 1.25, duration: 0.4, ease: 'elastic.out(1, 0.4)', yoyo: true, repeat: 1 }
       );
     }
   };
 
-  // Dropdown entrance animation (Fade + scale + slide)
   useEffect(() => {
     if (showNotifications && notifyDropdownRef.current) {
       gsap.fromTo(notifyDropdownRef.current,
@@ -118,7 +108,6 @@ export default function Header({
     }
   }, [showProfileMenu]);
 
-  // Banner slide-down animation whenever it appears
   useEffect(() => {
     if (showBanner && bannerRef.current) {
       gsap.fromTo(bannerRef.current,
@@ -131,9 +120,7 @@ export default function Header({
   return (
     <>
       <header className="h-20 border-b border-slate-200 bg-white sticky top-0 z-20 flex items-center justify-between px-6 md:px-8 select-none">
-        {/* Page Title & Search */}
         <div className="flex items-center gap-4">
-          {/* Mobile menu toggle */}
           <button
             onClick={onMenuToggle}
             className="p-2 -ml-2 text-slate-500 hover:text-slate-800 md:hidden rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
@@ -144,14 +131,12 @@ export default function Header({
           </button>
           <div>
             <h2 className="text-xl font-semibold text-slate-900 tracking-tight">{t(getTabTitle(currentTab))}</h2>
-            <p className="text-xs text-slate-500 hidden sm:block">Neha Fashion Private Limited • BSE SME Platform</p>
+            {/* DYNAMIC COMPANY NAME USED HERE */}
+            <p className="text-xs text-slate-500 hidden sm:block">{companyName} • BSE SME Platform</p>
           </div>
         </div>
 
-        {/* Header Actions */}
         <div className="flex items-center gap-6">
-
-          {/* Translation Toggle Button */}
           <button
             onClick={toggleLanguage}
             disabled={isTranslating}
@@ -160,18 +145,13 @@ export default function Header({
           >
             <Languages className="w-3.5 h-3.5 text-emerald-600" />
             <div className="flex items-center gap-1">
-              <span className={language === 'en' ? 'text-emerald-900 font-extrabold underline' : 'text-slate-400'}>
-                ENG
-              </span>
+              <span className={language === 'en' ? 'text-emerald-900 font-extrabold underline' : 'text-slate-400'}>ENG</span>
               <span className="text-slate-300">|</span>
-              <span className={language === 'hi' ? 'text-emerald-900 font-extrabold underline' : 'text-slate-400'}>
-                HIN
-              </span>
+              <span className={language === 'hi' ? 'text-emerald-900 font-extrabold underline' : 'text-slate-400'}>HIN</span>
             </div>
             {isTranslating && <Loader2 className="w-3 h-3 animate-spin text-emerald-600" />}
           </button>
 
-          {/* Notifications Bell */}
           <div className="relative mr-4">
             <button
               ref={bellRef}
@@ -183,7 +163,6 @@ export default function Header({
               <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red border-2 border-white rounded-full animate-pulse" />
             </button>
 
-            {/* Notifications Dropdown */}
             {showNotifications && (
               <div
                 ref={notifyDropdownRef}
@@ -211,7 +190,6 @@ export default function Header({
         </div>
       </header>
 
-      {/* Language switch notice — dismissible banner directly under the navbar */}
       {showBanner && (
         <div
           ref={bannerRef}

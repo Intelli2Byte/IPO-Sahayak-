@@ -14,8 +14,9 @@ import {
   FileCheck
 } from 'lucide-react';
 import gsap from 'gsap';
-import { mockDashboardStats, mockCompanyDetails } from '@/data/mockData';
+import { mockDashboardStats, mockCompanyDetails, mockIpoApplication } from '@/data/mockData';
 import QuickStats from './QuickStats';
+import { useLanguage } from '@/context/LanguageContext'; // <-- Imported Language Context
 
 interface OverviewProps {
   setCurrentTab: (tab: string) => void;
@@ -24,6 +25,16 @@ interface OverviewProps {
 export default function Overview({ setCurrentTab }: OverviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
+  
+  // Consume language context
+  const { t } = useLanguage();
+
+  // ---- Derived, real (not invented) status data ----
+  const completedSteps = mockIpoApplication.stepProgress.filter(s => s.status === 'completed').length;
+  const totalSteps = mockIpoApplication.totalSteps;
+  const nextMilestone = mockIpoApplication.stepProgress.find(s => s.status !== 'completed');
+  const highPriorityActions = mockDashboardStats.upcomingDeadlines.filter(d => d.priority === 'high');
+  const actionsRequiredCount = highPriorityActions.length;
 
   useEffect(() => {
     // 1. Hero text split entry animations
@@ -86,15 +97,15 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
   // Format Iso Date
   const formatTimeAgo = (dateStr: string) => {
     const date = new Date(dateStr);
-    const now = new Date('2026-07-12T09:59:18+05:30'); // Reference local time
+    const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 60) return `${diffMins} mins ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    return `${diffDays} days ago`;
+    if (diffMins < 60) return `${diffMins} ${t('mins ago')}`;
+    if (diffHours < 24) return `${diffHours} ${t('hours ago')}`;
+    return `${diffDays} ${t('days ago')}`;
   };
 
   return (
@@ -111,31 +122,52 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
       >
         <div className="space-y-5 max-w-2xl">
           <span className="text-xs text-primary bg-primary-subtle border border-primary/20 px-3.5 py-1.5 rounded-full font-bold uppercase tracking-wider">
-            IPO Listing Campaign
+            {t('IPO Listing Campaign')}
           </span>
+
           <h2 className="text-3xl md:text-4xl font-extrabold text-slate-800 leading-tight">
-            <span className="animate-line block">Welcome Back, Rajesh.</span>
+            <span className="animate-line block">{t('Welcome Back, Rajesh.')}</span>
             <span className="animate-line block mt-1 text-slate-500 font-semibold text-xl md:text-2xl">
-              Track and accelerate {mockCompanyDetails.legalName}&apos;s listing path.
+              {t('Your IPO application is')} <span className="text-primary">{mockDashboardStats.overview.applicationProgress}% {t('complete')}</span>.
             </span>
           </h2>
+
           <p className="text-slate-600 text-sm md:text-base animate-line font-medium leading-relaxed">
-            Your application is <strong className="text-primary font-semibold">{mockDashboardStats.overview.applicationProgress}% complete</strong>. 
-            All regulatory reviews are up-to-date. Ensure pending legal opinion is submitted on schedule.
+            <strong className="text-slate-800 font-semibold">{completedSteps} {t('of')} {totalSteps} {t('milestones completed')}</strong>
+            {nextMilestone && (
+              <>
+                {' '}&middot; {t('Next up')}:{' '}
+                <strong className="text-primary font-semibold">{t(nextMilestone.stepName)}</strong>
+              </>
+            )}
+            {' '}{t('for')} {mockCompanyDetails.legalName}.
           </p>
+
+          {actionsRequiredCount > 0 && (
+            <div className="animate-line flex flex-wrap items-center gap-2.5 pt-0.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-error bg-red/5 border border-red/10 px-3 py-1.5 rounded-full whitespace-nowrap">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {actionsRequiredCount} {t('Actions Required')}
+              </span>
+              <span className="text-xs text-slate-500 font-semibold">
+                {highPriorityActions.map(a => t(a.title)).join(' · ')}
+              </span>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-4 pt-2">
             <button
               onClick={() => setCurrentTab('wizard')}
               className="hero-cta px-6 py-3 rounded-xl bg-primary hover:bg-primary-light text-white text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/25 cursor-pointer transition-all active:scale-95"
             >
-              <span>Continue IPO Form</span>
+              <span>{t('Continue IPO Form')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
               onClick={() => setCurrentTab('vault')}
               className="hero-cta px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-bold cursor-pointer transition-all active:scale-95"
             >
-              Upload Documents
+              {t('Upload Documents')}
             </button>
           </div>
         </div>
@@ -146,26 +178,26 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
             <FileCheck className="w-8 h-8" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Listing Milestones</p>
-            <p className="text-2xl font-bold text-slate-800 mt-1">4 of 8 Steps Done</p>
-            <span className="text-xs text-emerald-500 font-medium block mt-1">Next: Section 5 Approval</span>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">{t('Listing Milestones')}</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{completedSteps} {t('of')} {totalSteps} {t('Steps Done')}</p>
+            {nextMilestone && (
+              <span className="text-xs text-emerald-500 font-medium block mt-1">{t('Next')}: {t(nextMilestone.stepName)}</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Stats Cards Panel */}
       <div className="relative z-10">
         <QuickStats />
       </div>
 
-      {/* Analytics charts, updates and deadlines grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
         
-        {/* Compliance Progress Card (Replaced graph with large-text list) */}
+        {/* Compliance Progress Card */}
         <div className="section-entry lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-8 shadow-default flex flex-col justify-between">
           <div>
-            <h3 className="text-xl font-bold text-slate-850">Compliance Category Breakdown</h3>
-            <p className="text-sm text-slate-500 mt-2 font-medium">Status of regulatory and compliance checkpoints</p>
+            <h3 className="text-xl font-bold text-slate-850">{t('Compliance Category Breakdown')}</h3>
+            <p className="text-sm text-slate-500 mt-2 font-medium">{t('Status of regulatory and compliance checkpoints')}</p>
           </div>
           <div className="mt-8 space-y-6 flex-1 flex flex-col justify-center">
             {mockDashboardStats.progressByCategory.map((item) => {
@@ -178,7 +210,7 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
               return (
                 <div key={item.category} className="space-y-2">
                   <div className="flex justify-between items-center text-sm md:text-base font-bold text-slate-700">
-                    <span>{item.category}</span>
+                    <span>{t(item.category)}</span>
                     <span className={textClass}>{item.progress}%</span>
                   </div>
                   <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
@@ -197,11 +229,11 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
         <div className="section-entry bg-white rounded-2xl border border-slate-200 p-8 shadow-default">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Critical Actions</h3>
-              <p className="text-xs text-slate-500 mt-1.5">Tasks requiring immediate attention</p>
+              <h3 className="text-lg font-bold text-slate-800">{t('Critical Actions')}</h3>
+              <p className="text-xs text-slate-500 mt-1.5">{t('Tasks requiring immediate attention')}</p>
             </div>
             <span className="text-xs bg-red/10 text-red border border-red/10 px-2.5 py-1 rounded-full font-bold uppercase">
-              Overdue: 0
+              {t('Overdue')}: 0
             </span>
           </div>
 
@@ -220,9 +252,9 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
                   className="p-4.5 border border-slate-150 rounded-xl hover:border-slate-350 hover:bg-slate-50/50 transition-all flex items-start justify-between gap-4 cursor-pointer"
                 >
                   <div className="space-y-2">
-                    <p className="text-sm font-bold text-slate-800 leading-tight">{deadline.title}</p>
+                    <p className="text-sm font-bold text-slate-800 leading-tight">{t(deadline.title)}</p>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 font-semibold">By {deadline.assignedTo}</span>
+                      <span className="text-xs text-slate-400 font-semibold">{t('By')} {deadline.assignedTo}</span>
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                       <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
@@ -232,11 +264,11 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${priorityClasses}`}>
-                      {deadline.priority}
+                      {t(deadline.priority)}
                     </span>
                     <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {deadline.daysRemaining} days left
+                      {deadline.daysRemaining} {t('days left')}
                     </span>
                   </div>
                 </div>
@@ -249,14 +281,14 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
         <div className="section-entry lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-8 shadow-default">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Recent Portal Activities</h3>
-              <p className="text-xs text-slate-500 mt-1.5">Audit log of latest uploads and updates</p>
+              <h3 className="text-lg font-bold text-slate-800">{t('Recent Portal Activities')}</h3>
+              <p className="text-xs text-slate-500 mt-1.5">{t('Audit log of latest uploads and updates')}</p>
             </div>
             <button 
               onClick={() => setCurrentTab('vault')}
               className="text-sm text-primary font-bold hover:underline flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Vault History</span>
+              <span>{t('Vault History')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -275,10 +307,10 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
                     <Icon className="w-4.5 h-4.5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800">{activity.title}</p>
-                    <p className="text-sm text-slate-500 mt-1 truncate font-medium">{activity.description}</p>
+                    <p className="text-sm font-bold text-slate-800">{t(activity.title)}</p>
+                    <p className="text-sm text-slate-500 mt-1 truncate font-medium">{t(activity.description)}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-slate-400 font-semibold">By {activity.user}</span>
+                      <span className="text-xs text-slate-400 font-semibold">{t('By')} {activity.user}</span>
                       <span className="w-1 h-1 rounded-full bg-slate-350" />
                       <span className="text-xs text-slate-400 font-semibold">{formatTimeAgo(activity.timestamp)}</span>
                     </div>
@@ -294,9 +326,9 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
       {/* Technology Development Framework Matrix */}
       <div className="section-entry bg-white rounded-2xl border border-slate-200 p-8 shadow-default space-y-6 relative z-10">
         <div>
-          <h3 className="text-xl font-bold text-slate-850">Technology Development & Disclosure Matrix</h3>
+          <h3 className="text-xl font-bold text-slate-850">{t('Technology Development & Disclosure Matrix')}</h3>
           <p className="text-xs text-slate-500 mt-1.5 font-semibold">
-            Institutional technology capabilities mapped to SEBI DRHP disclosure areas.
+            {t('Institutional technology capabilities mapped to SEBI DRHP disclosure areas.')}
           </p>
         </div>
 
@@ -304,10 +336,10 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-bold">
-                <th className="p-4 pl-5">Disclosure Area</th>
-                <th className="p-4 text-center">SME Equity IPO</th>
-                <th className="p-4 text-center">Debt Issue (NCD/Bonds)</th>
-                <th className="p-4 pr-5">Technology Opportunity</th>
+                <th className="p-4 pl-5">{t('Disclosure Area')}</th>
+                <th className="p-4 text-center">{t('SME Equity IPO')}</th>
+                <th className="p-4 text-center">{t('Debt Issue (NCD/Bonds)')}</th>
+                <th className="p-4 pr-5">{t('Technology Opportunity')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -326,12 +358,12 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
                 { area: 'Statutory Approvals', equity: '✓', debt: '✓', tech: 'Compliance checklist engine according to the industry in which it is operating' }
               ].map((row, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/20">
-                  <td className="p-4 pl-5 font-bold text-slate-800">{row.area}</td>
+                  <td className="p-4 pl-5 font-bold text-slate-800">{t(row.area)}</td>
                   <td className="p-4 text-center">
                     <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
                       row.equity === '✓' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {row.equity}
+                      {t(row.equity)}
                     </span>
                   </td>
                   <td className="p-4 text-center">
@@ -339,10 +371,10 @@ export default function Overview({ setCurrentTab }: OverviewProps) {
                       row.debt === '✓' ? 'bg-emerald-50 text-emerald-600' : 
                       row.debt.startsWith('Mandatory') ? 'bg-primary-subtle text-primary font-bold' : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {row.debt}
+                      {t(row.debt)}
                     </span>
                   </td>
-                  <td className="p-4 pr-5 text-slate-600 font-bold">{row.tech}</td>
+                  <td className="p-4 pr-5 text-slate-600 font-bold">{t(row.tech)}</td>
                 </tr>
               ))}
             </tbody>

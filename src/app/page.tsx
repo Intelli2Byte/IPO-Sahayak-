@@ -9,6 +9,7 @@ import Overview from '@/components/Dashboard/Overview';
 import StepWizard from '@/components/Wizard/StepWizard';
 import VaultManager from '@/components/DocumentVault/VaultManager';
 import ComplianceTracker from '@/components/Compliance/ComplianceTracker';
+import GeneratedDocuments from '@/components/GeneratedDocuments/GeneratedDocuments';
 import TeamAccess from '@/components/Dashboard/TeamAccess';
 import Onboarding from '@/components/Onboarding/Onboarding';
 
@@ -27,14 +28,15 @@ export default function Home() {
   const [mfaEnabled, setMfaEnabled] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState('30');
 
-  // Dynamic Profile State with fixed Name & Designation
+  // Dynamic Profile State with fixed Name & Designation & Company Name
   const [profileData, setProfileData] = useState({
     name: 'Isha Ambani',
     designation: 'Board of Director',
     email: 'isha.ambani@reliance.com',
     cin: 'U72900GJ2007PLC105869',
     din: '08492311',
-    authority: 'Primary Promoter'
+    authority: 'Primary Promoter',
+    companyName: 'Reliance Jio Infocomm Limited' // <-- Added dynamic company name default
   });
 
   // Fetch dynamic user data from API when available
@@ -51,6 +53,7 @@ export default function Home() {
               email: data.user.officialEmail || data.user.email || prev.email,
               cin: data.user.cin || prev.cin,
               din: data.user.din || prev.din,
+              companyName: data.user.companyName || prev.companyName // <-- API mapping
             }));
           }
         })
@@ -104,6 +107,8 @@ export default function Home() {
         return <VaultManager />;
       case 'compliance':
         return <ComplianceTracker />;
+      case 'generated':
+        return <GeneratedDocuments />;
       case 'team':
         return <TeamAccess />;
       default:
@@ -189,7 +194,7 @@ export default function Home() {
               className="flex-1 flex flex-col min-w-0 transition-all duration-350"
               style={{ paddingLeft: isSidebarOpen ? '256px' : '80px', transition: 'padding-left 0.35s ease' }}
             >
-              {/* Header toolbar with dropdown handlers */}
+              {/* Header toolbar with dynamic company name passed */}
               <Header
                 currentTab={currentTab}
                 isSidebarOpen={isSidebarOpen}
@@ -197,6 +202,7 @@ export default function Home() {
                 onLogout={() => setIsLoggedIn(false)}
                 onMyProfileClick={() => setIsProfileOpen(true)}
                 onSettingsClick={() => setIsSettingsOpen(true)}
+                companyName={profileData.companyName}
               />
 
               {/* Content Wrapper */}
