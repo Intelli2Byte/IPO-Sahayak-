@@ -14,7 +14,16 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import { mockDocumentVault, DocumentCategory, DocumentItem, Comment, mockUserProfile } from '@/data/mockData';
-import SplitDocumentViewer from './SplitDocumentViewer';
+import dynamic from 'next/dynamic';
+
+const SplitDocumentViewer = dynamic(() => import('./SplitDocumentViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center">
+      <div className="text-white text-sm font-semibold">Loading PDF Viewer...</div>
+    </div>
+  ),
+});
 
 export default function VaultManager() {
   const [categories, setCategories] = useState<DocumentCategory[]>(mockDocumentVault.categories);
