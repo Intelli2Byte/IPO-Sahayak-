@@ -167,13 +167,13 @@ interface PanelProps {
 
 const AI_MDA_TEMPLATES: Record<string, string> = {
   'Results of Operations':
-    "During Fiscal 2026, Revenue from Operations increased by 14.56% to ₹1,468,853 million, driven by growth in digital connectivity and expansion of the customer base across core segments. Profit After Tax grew in line with operating leverage, supported by disciplined cost management. [Note 24, pg 142]",
+    'During Fiscal 2026, Revenue from Operations increased by 14.56% to ₹1,468,853 million, driven by growth in digital connectivity and expansion of the customer base across core segments. Profit After Tax grew in line with operating leverage, supported by disciplined cost management. [Note 24, pg 142]',
   Liquidity:
     "The Company's liquidity position remains stable, supported by operating cash flows and access to working capital facilities. Cash and cash equivalents, together with undrawn credit lines, are considered sufficient to meet near-term obligations. [Note 19, pg 156]",
   'Capital Resources':
-    "The Company funds its capital requirements through a mix of internal accruals, term loans and external commercial borrowings. Capital expenditure during the year was primarily directed towards network expansion and technology infrastructure. [Note 18, pg 154]",
+    'The Company funds its capital requirements through a mix of internal accruals, term loans and external commercial borrowings. Capital expenditure during the year was primarily directed towards network expansion and technology infrastructure. [Note 18, pg 154]',
   'Off-Balance Sheet Items':
-    "As of the balance sheet date, the Company does not have any material off-balance sheet arrangements that have, or are reasonably likely to have, a material effect on its financial condition. [Note 31, pg 168]",
+    'As of the balance sheet date, the Company does not have any material off-balance sheet arrangements that have, or are reasonably likely to have, a material effect on its financial condition. [Note 31, pg 168]',
 };
 
 function wordCount(text: string) {
@@ -377,7 +377,8 @@ export default function PanelThree_FinancialDossier({
     0
   );
 
-  const debtToEquity = data.netWorth > 0 ? totalIndebtedness / data.netWorth : 0;
+  const debtToEquity =
+    data.netWorth > 0 ? totalIndebtedness / data.netWorth : 0;
   const debtToEquityFlagged = debtToEquity > 2;
 
   const kpiConfigs: Array<{
@@ -494,7 +495,9 @@ export default function PanelThree_FinancialDossier({
                   <input
                     type="file"
                     className="hidden"
-                    onChange={(e) => handleFileSelect(doc.id, e.target.files)}
+                    onChange={(e) =>
+                      handleFileSelect(doc.id, e.target.files)
+                    }
                   />
                 </label>
               </div>
@@ -553,7 +556,6 @@ export default function PanelThree_FinancialDossier({
             return (
               <div
                 key={kpi.field}
-                title={kpi.note}
                 className="group relative rounded-xl border border-slate-200 bg-white p-4"
               >
                 <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">
@@ -582,12 +584,18 @@ export default function PanelThree_FinancialDossier({
                   <button
                     type="button"
                     onClick={() => unlockKpi(kpi.field)}
-                    className="hidden group-hover:inline-flex absolute top-3 right-3 items-center gap-1 text-[9px] font-black uppercase text-[#1E3A8A]"
+                    className="absolute top-3 right-3 inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#1E3A8A] bg-white/90 px-1.5 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150"
                   >
                     <Pencil className="w-3 h-3" />
                     Edit
                   </button>
                 )}
+
+                {/* Custom provenance tooltip */}
+                <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-9 z-20 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1.5 text-[9px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                  {kpi.note}
+                  <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                </div>
 
                 {data.kpiEditAudit[kpi.field] && (
                   <p className="text-[9px] text-amber-700 font-semibold mt-2">
@@ -733,8 +741,9 @@ export default function PanelThree_FinancialDossier({
                       value={record.classification}
                       onChange={(e) =>
                         updateIndebtednessRecord(index, {
-                          classification: e.target
-                            .value as IndebtednessRecord['classification'],
+                          classification:
+                            e.target
+                              .value as IndebtednessRecord['classification'],
                         })
                       }
                       className={PAPER_SELECT}
@@ -798,7 +807,8 @@ export default function PanelThree_FinancialDossier({
 
         <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
           <span className="text-xs font-black text-slate-800">
-            Total Indebtedness: ₹{totalIndebtedness.toLocaleString('en-IN')} Mn
+            Total Indebtedness: ₹
+            {totalIndebtedness.toLocaleString('en-IN')} Mn
           </span>
 
           {debtToEquityFlagged && (
