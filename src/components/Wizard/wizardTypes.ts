@@ -151,6 +151,33 @@ export interface CapitalHistoryRecord {
   isAiExtracted?: boolean;
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * NEW — Step 3 Financial Dossier types
+ * ──────────────────────────────────────────────────────────────── */
+
+export interface FinancialDocumentItem {
+  id: string;
+  label: string;
+  required: boolean;
+  file: UploadedFileMeta | null;
+  /** Set when the doc was already collected in an earlier step (dedup). */
+  reusedFromStep?: number;
+}
+
+export interface IndebtednessRecord {
+  category: string;
+  classification: 'Current' | 'Non-Current' | '';
+  amount: number;
+  source: string;
+  isAiExtracted?: boolean;
+}
+
+export interface MdaSectionContent {
+  content: string;
+  aiDrafted: boolean;
+  wordCount: number;
+}
+
 export interface WizardFormData {
   cin: string;
   companyName: string;
@@ -285,6 +312,15 @@ export interface WizardFormData {
 
   attachedDocs: string[];
 
+  // NEW — Financial Dossier (Step 3)
+  financialDocuments: FinancialDocumentItem[];
+  financialExtractionStatus: 'idle' | 'parsing' | 'done';
+  ebitdaMargin: number;
+  kpiEditAudit: Record<string, string>;
+  indebtednessRecords: IndebtednessRecord[];
+  mdaSections: Record<string, MdaSectionContent>;
+  mdaActiveTab: string;
+
   materialCreditorDues: string;
   pendingLitigationDetails: string;
   materialityAssessment: 'Material' | 'Immaterial' | '';
@@ -346,6 +382,48 @@ export const DEFAULT_MARKET_CHANNELS: MarketChannel[] = [
   { label: 'Digital / E-commerce Storefront', checked: false },
   { label: 'Original Equipment Manufacturer (OEM) Supply', checked: false },
 ];
+
+/* NEW — Step 3 constants */
+
+export const MDA_TABS = [
+  'Results of Operations',
+  'Liquidity',
+  'Capital Resources',
+  'Off-Balance Sheet Items',
+];
+
+export const DEFAULT_FINANCIAL_DOCUMENTS: FinancialDocumentItem[] = [
+  {
+    id: 'audited-financials',
+    label: 'Audited Consolidated Financial Statements',
+    required: true,
+    file: null,
+  },
+  {
+    id: 'ceo-cfo-certificate',
+    label: 'CEO–CFO Certificate',
+    required: true,
+    file: null,
+  },
+  {
+    id: 'auditor-report',
+    label: "Auditor's Report (Annexure)",
+    required: true,
+    file: null,
+  },
+  {
+    id: 'tax-benefits-statement',
+    label: 'Statement of Possible Special Tax Benefits',
+    required: false,
+    file: null,
+  },
+];
+
+export const DEFAULT_MDA_SECTIONS: Record<string, MdaSectionContent> =
+  MDA_TABS.reduce((acc, tab) => {
+    acc[tab] = { content: '', aiDrafted: false, wordCount: 0 };
+    return acc;
+  }, {} as Record<string, MdaSectionContent>);
 
 export const INDIAN_STATES = [
   'Andhra Pradesh',
@@ -592,6 +670,15 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   indebtednessSchedule: '',
 
   attachedDocs: [],
+
+  // NEW — Financial Dossier (Step 3) defaults
+  financialDocuments: DEFAULT_FINANCIAL_DOCUMENTS,
+  financialExtractionStatus: 'idle',
+  ebitdaMargin: 0,
+  kpiEditAudit: {},
+  indebtednessRecords: [],
+  mdaSections: DEFAULT_MDA_SECTIONS,
+  mdaActiveTab: MDA_TABS[0],
 
   materialCreditorDues: '',
   pendingLitigationDetails: '',
