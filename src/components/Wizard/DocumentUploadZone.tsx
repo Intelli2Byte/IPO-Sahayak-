@@ -1,42 +1,42 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import {
-  UploadCloud,
-  FileText,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  RefreshCw,
-} from 'lucide-react';
+import { UploadCloud, CheckCircle2, Trash2 } from 'lucide-react';
 
 interface DocumentUploadZoneProps {
   documentType: string;
   title: string;
-  description: string;
+  description?: string;
+  isOptional?: boolean;
   onUploadComplete: (data: any) => void;
+  onDelete?: () => void;
   extractedData?: any;
+  uploadedFile?: { name: string; size: number } | null;
   isProcessing?: boolean;
   error?: string | null;
 }
 
 /**
- * IMPORTANT:
- *
- * This component intentionally does NOT call a real backend endpoint.
- * Document extraction is simulated locally so the UI works even when
- * no parser/API is running.
- *
- * Later, this can be replaced with a real API call without changing
- * the parent component interface.
+ * Reusable File Upload Row Component
+ * 
+ * Matches the UI specification:
+ * - Card-based layout with rounded corners and light grey border
+ * - Three states: Empty, Uploading, Uploaded
+ * - Status icon on the left (empty square → green checkmark)
+ * - Document title with optional "OPTIONAL" badge
+ * - File details shown when uploaded
+ * - Action buttons on the right (DROP/BROWSE + delete icon when uploaded)
  */
 
 export default function DocumentUploadZone({
   documentType,
   title,
   description,
+  isOptional = false,
   onUploadComplete,
+  onDelete,
   extractedData,
+  uploadedFile,
   isProcessing: externalProcessing,
   error: externalError,
 }: DocumentUploadZoneProps) {
@@ -44,224 +44,108 @@ export default function DocumentUploadZone({
 
   const [isUploading, setIsUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  /**
-   * Fixed prototype extraction data.
-   *
-   * This is what appears after the 1-second "Just a sec..."
-   * processing state, keyed by documentType.
-   */
-  const getMockExtractedData = useCallback(
-    () => {
-      if (documentType === 'board-resolution') {
-        return {
-          documentType: 'board-resolution',
-
-          totalIssueSize: 20000000,
-
-          fundingAllocations: [
-            { purpose: 'Capital Expenditure', amount: 8000000, percentage: 40 },
-            { purpose: 'Working Capital Requirements', amount: 6000000, percentage: 30 },
-            { purpose: 'Debt Repayment', amount: 4000000, percentage: 20 },
-            { purpose: 'General Corporate Purposes', amount: 2000000, percentage: 10 },
-          ],
-
-          deploymentSchedule: {
-            fy2025: 5000000,
-            fy2026: 3000000,
-          },
-
-          debtRepayment: {
-            bankName: 'State Bank of India',
-            loanAccount: '**********4452',
-          },
-
-          compliance: 'no',
-
-          narrative:
-            'The Net Proceeds are proposed to be utilized towards capital expenditure, working capital requirements, repayment of identified borrowings and general corporate purposes, in accordance with the objects approved by the Board.',
-        };
-      }
-
-      if (documentType === 'auditor-certificate') {
-        return {
-          documentType: 'auditor-certificate',
-
-          certificateStatus: 'Verified',
-
-          certifiedIssueSize: 20000000,
-
-          fundingAllocations: [
-            { purpose: 'Capital Expenditure', amount: 8000000, percentage: 40 },
-            { purpose: 'Working Capital Requirements', amount: 6000000, percentage: 30 },
-            { purpose: 'Debt Repayment', amount: 4000000, percentage: 20 },
-            { purpose: 'General Corporate Purposes', amount: 2000000, percentage: 10 },
-          ],
-
-          auditorObservation:
-            'The proposed deployment of issue proceeds is consistent with the objects of the issue and the supporting Board Resolution.',
-        };
-      }
-
-      if (documentType === 'risk-register') {
-        return {
-          documentType: 'risk-register',
-
-          /**
-           * 6.2 — Inherited Financial Risks
-           * (mirrors Step 3 Financial Dossier extraction)
-           */
-          contingentLiabilitiesNotAcknowledged: 15021000000,
-          outstandingIndebtednessFundBased: 851067000000,
-
-          /**
-           * 6.3 — AI-Drafted Core Risk Factors
-           */
-          risks: [
-            {
-              title: 'Regulatory & Spectrum Risk',
-              description:
-                'RJIL holds telecommunication licences and spectrum across different bands, frequencies and circles, which are subject to periodic renewal, regulatory conditions and government policy changes. Any adverse change in telecom regulations, spectrum allocation norms, or licence renewal terms could materially affect our operations and financial condition.',
-              category: 'Regulatory',
-            },
-            {
-              title: 'Related Party & Vendor Dependency Risk',
-              description:
-                'We rely on a limited group of passive infrastructure providers (e.g., SDIL, JDFPL) and related parties (RRL) for critical network infrastructure, tower access, fibre connectivity and retail distribution. Any disruption in these relationships or unfavourable renegotiation of terms could adversely impact our business operations and profitability.',
-              category: 'Concentration',
-            },
-          ],
-
-          /**
-           * 6.4 — Materiality Thresholds
-           */
-          materialityThresholdPercent: 1,
-          materialityThresholdAmount: 33597690,
-
-          /**
-           * 6.5 — Related Party Risks
-           */
-          relatedPartyRiskEntities: [
-            'Reliance Retail Limited',
-            'Summit Digitel Infrastructure',
-          ],
-
-          /**
-           * 6.6 — Manual / cyber-tech risk suggestion
-           */
-          cyberTechRiskDescription:
-            'We are transitioning from 4G to 5G SA networks, which carries deployment latency risks, potential service disruption during migration, and evolving cybersecurity threats associated with new network architecture and increased IoT device connectivity.',
-        };
-      }
-
+  const getMockExtractedData = useCallback(() => {
+    if (documentType === 'legal-disclosures') {
       return {
-        documentType,
-        status: 'Extracted',
+        documentType: 'legal-disclosures',
+        litigationsCount: 26,
+        taxDisputesCount: 200,
+        aggregateTaxDisputesAmount: 108110000000,
+        defaultComplianceStatus: 'NO DEFAULTS FOUND',
+        narrative:
+          'As of the date of this Draft Red Herring Prospectus, there are 26 outstanding civil/statutory proceedings and 200 pending tax disputes against the Company, aggregating to ₹108,110,000,000. The Company has not defaulted in the repayment of statutory dues, bank loans, or debentures. For further details, see "Outstanding Litigation and Material Developments" beginning on page [•].',
+        affidavitSuggestions: {
+          hasPendingLitigation: 'no',
+          hasRegulatoryAction: 'yes',
+          hasDefaultHistory: 'no',
+        },
       };
-    },
-    [documentType]
-  );
+    }
+
+    return {
+      documentType,
+      status: 'Extracted',
+    };
+  }, [documentType]);
 
   const uploadFile = useCallback(
     async (file: File) => {
-      /**
-       * Accept PDFs based on MIME type OR extension.
-       *
-       * Some browsers do not always populate File.type correctly,
-       * especially with locally selected files.
-       */
       const isPdf =
-        file.type === 'application/pdf' ||
-        file.name.toLowerCase().endsWith('.pdf');
+        file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
       if (!isPdf) {
         setLocalError('Only PDF files are accepted.');
-        setFileName(null);
         return;
       }
 
-      /**
-       * 25 MB prototype limit.
-       */
       if (file.size > 25 * 1024 * 1024) {
         setLocalError('PDF must be smaller than 25 MB.');
-        setFileName(null);
         return;
       }
 
       setLocalError(null);
-      setFileName(file.name);
       setIsUploading(true);
 
-      /**
-       * Simulated AI/document extraction.
-       *
-       * Exactly 1 second so the UI can display:
-       *
-       * "Just a sec..."
-       *
-       * before revealing the extracted information.
-       */
+      // Simulate 1-second AI extraction
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, 1000);
       });
 
       const extracted = getMockExtractedData();
-
       setIsUploading(false);
 
-      /**
-       * Send the fixed extracted result to the parent panel.
-       */
-      onUploadComplete(extracted);
+      onUploadComplete({
+        ...extracted,
+        file: {
+          name: file.name,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        },
+      });
     },
     [getMockExtractedData, onUploadComplete]
   );
 
-  const handleFileSelect = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-
     if (file) {
       void uploadFile(file);
     }
-
-    /**
-     * Allows selecting the same file again.
-     */
     e.target.value = '';
   };
 
-  const handleDrop = (
-    e: React.DragEvent<HTMLDivElement>
-  ) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-
     setIsDragging(false);
-
     const file = e.dataTransfer.files?.[0];
-
     if (file) {
       void uploadFile(file);
     }
   };
 
-  const hasData = Boolean(extractedData);
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) {
+      onDelete();
+    }
+  };
 
-  const displayError =
-    externalError || localError;
+  const hasFile = Boolean(uploadedFile);
+  const displayError = externalError || localError;
+  const processing = isUploading || Boolean(externalProcessing);
 
-  const processing =
-    isUploading || Boolean(externalProcessing);
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
     <div
       onDragOver={(e) => {
         e.preventDefault();
-
         if (!processing) {
           setIsDragging(true);
         }
@@ -270,29 +154,19 @@ export default function DocumentUploadZone({
         setIsDragging(false);
       }}
       onDrop={handleDrop}
-      onClick={() => {
-        if (!processing) {
-          inputRef.current?.click();
-        }
-      }}
       className={`
-        flex items-center gap-3
-        rounded-lg
-        border
-        px-4 py-3
-        transition-all
-        duration-200
+        flex items-center gap-4
+        px-5 py-4
+        border rounded-lg
+        transition-all duration-200
         ${
-          processing
-            ? 'cursor-wait border-amber-300 bg-amber-50'
-            : isDragging
-            ? 'cursor-pointer border-[#1E3A8A] bg-blue-50'
-            : hasData
-            ? 'cursor-pointer border-emerald-300 bg-emerald-50'
-            : displayError
-            ? 'cursor-pointer border-red-300 bg-red-50'
-            : 'cursor-pointer border-slate-300 bg-slate-50 hover:border-[#1E3A8A]/50 hover:bg-slate-100'
+          isDragging
+            ? 'border-blue-400 bg-blue-50'
+            : hasFile
+            ? 'border-slate-300 bg-white'
+            : 'border-slate-300 bg-white hover:border-slate-400'
         }
+        ${processing ? 'cursor-wait opacity-70' : 'cursor-default'}
       `}
     >
       <input
@@ -304,100 +178,82 @@ export default function DocumentUploadZone({
         disabled={processing}
       />
 
-      {/* ICON */}
-      <div
-        className={`
-          flex
-          items-center
-          justify-center
-          w-9 h-9
-          rounded-md
-          shrink-0
-          ${
-            processing
-              ? 'bg-amber-100'
-              : hasData
-              ? 'bg-emerald-100'
-              : displayError
-              ? 'bg-red-100'
-              : 'bg-white border border-slate-200'
-          }
-        `}
-      >
-        {processing ? (
-          <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
-        ) : hasData ? (
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-        ) : displayError ? (
-          <XCircle className="w-4 h-4 text-red-600" />
+      {/* LEFT: STATUS ICON */}
+      <div className="shrink-0">
+        {hasFile ? (
+          <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
+            <CheckCircle2 className="w-4 h-4 text-white" />
+          </div>
         ) : (
-          <UploadCloud className="w-4 h-4 text-slate-500" />
+          <div className="w-6 h-6 rounded border-2 border-slate-300" />
         )}
       </div>
 
-      {/* CONTENT */}
+      {/* MIDDLE: DOCUMENT INFO */}
       <div className="flex-1 min-w-0">
-        {processing ? (
-          <>
-            <p className="text-xs font-black text-amber-800 truncate">
-              Just a sec…
-            </p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <h4 className="text-sm font-semibold text-slate-800 truncate">{title}</h4>
+          {isOptional && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+              OPTIONAL
+            </span>
+          )}
+        </div>
 
-            <p className="text-[10px] text-amber-700 truncate">
-              AI is reading {fileName || 'your document'} and extracting
-              structured data.
-            </p>
-          </>
-        ) : hasData ? (
-          <>
-            <p className="text-xs font-bold text-emerald-800 truncate">
-              {fileName || 'Document'} analyzed successfully
-            </p>
-
-            <p className="text-[10px] text-emerald-700">
-              Data extracted · Click to replace document
-            </p>
-          </>
+        {hasFile && uploadedFile ? (
+          <p className="text-xs text-slate-500 truncate">
+            {uploadedFile.name} · {formatFileSize(uploadedFile.size)}
+          </p>
+        ) : processing ? (
+          <p className="text-xs text-amber-600 font-medium">
+            AI is extracting structured data...
+          </p>
         ) : displayError ? (
-          <>
-            <p className="text-xs font-bold text-red-700 truncate">
-              {displayError}
-            </p>
-
-            <p className="text-[10px] text-red-600 flex items-center gap-1">
-              <RefreshCw className="w-3 h-3" />
-              Click to try again
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-xs font-bold text-slate-700 truncate">
-              {title}
-            </p>
-
-            <p className="text-[10px] text-slate-500 truncate">
-              {description}
-            </p>
-          </>
-        )}
+          <p className="text-xs text-red-600 font-medium">{displayError}</p>
+        ) : description ? (
+          <p className="text-xs text-slate-500">{description}</p>
+        ) : null}
       </div>
 
-      {/* FILE TYPE */}
-      {!processing &&
-        !hasData &&
-        !displayError && (
-          <span className="text-[10px] text-slate-400 shrink-0 flex items-center gap-1">
-            <FileText className="w-3 h-3" />
-            PDF · 25MB
-          </span>
+      {/* RIGHT: ACTION BUTTONS */}
+      <div className="flex items-center gap-2 shrink-0">
+        {hasFile && onDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={processing}
+            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+            title="Delete file"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         )}
 
-      {/* PROCESSING INDICATOR */}
-      {processing && (
-        <span className="text-[10px] font-black text-amber-700 shrink-0">
-          EXTRACTING
-        </span>
-      )}
+        <button
+          type="button"
+          onClick={() => {
+            if (!processing) {
+              inputRef.current?.click();
+            }
+          }}
+          disabled={processing}
+          className="
+            flex items-center gap-2
+            px-4 py-2
+            text-xs font-semibold
+            text-slate-700
+            bg-white
+            border border-slate-300
+            rounded-md
+            hover:bg-slate-50
+            transition-colors
+            disabled:opacity-50 disabled:cursor-not-allowed
+          "
+        >
+          <UploadCloud className="w-4 h-4" />
+          <span>DROP / BROWSE</span>
+        </button>
+      </div>
     </div>
   );
 }
