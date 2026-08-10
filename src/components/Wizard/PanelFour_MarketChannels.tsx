@@ -10,6 +10,7 @@ import {
   Smartphone,
   Sparkles,
   X,
+  CheckCircle2,
 } from 'lucide-react';
 
 import HighlighterField from '../UI/HighlighterField';
@@ -188,7 +189,7 @@ export default function PanelFour_MarketChannels({ data, update, errors }: Panel
             </h4>
           </div>
 
-          {/* 4.2 — MONETIZATION CHANNELS (unchanged design) */}
+          {/* 4.2 — MONETIZATION CHANNELS */}
           <div>
             <p className="text-xs font-bold text-slate-700 mb-1 font-sans">
               4.2 — Monetization Channels
@@ -199,43 +200,47 @@ export default function PanelFour_MarketChannels({ data, update, errors }: Panel
             </p>
 
             <div className="flex flex-col gap-3">
-              {data.marketChannels.map((channel, idx) => (
-                <div
-                  key={channel.label}
-                  onClick={() => toggleChannel(idx)}
-                  className={`relative flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all overflow-hidden ${
-                    channel.checked
-                      ? 'border-[#1E3A8A] bg-blue-50'
-                      : 'border-slate-300 bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="text-[10px] font-black text-slate-400 w-6 shrink-0 font-mono">
-                    {String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <span className="text-xs font-bold text-slate-800 z-10 font-sans">
-                    {channel.label}
-                  </span>
+              {data.marketChannels.map((channel, idx) => {
+                const isAiDetected =
+                  channel.checked && MOCK_ACTIVE_CHANNEL_LABELS.includes(channel.label);
 
-                  {/* absolutely positioned signature-line indicator */}
-                  <div className="absolute inset-0 z-0 pointer-events-none opacity-80 flex items-center justify-end pr-4">
-                    <svg viewBox="0 0 100 24" className="w-24 h-6" preserveAspectRatio="none">
-                      <path
-                        d="M2,12 C 20,4 40,20 60,10 S 90,4 98,12"
-                        fill="none"
-                        stroke="#1E3A8A"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        pathLength={100}
-                        style={{
-                          strokeDasharray: 100,
-                          strokeDashoffset: channel.checked ? 0 : 100,
-                          transition: 'stroke-dashoffset 0.35s ease-out',
-                        }}
-                      />
-                    </svg>
+                return (
+                  <div
+                    key={channel.label}
+                    onClick={() => toggleChannel(idx)}
+                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all ${
+                      channel.checked
+                        ? 'border-[#1E3A8A] bg-blue-50'
+                        : 'border-slate-300 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-[10px] font-black text-slate-400 w-6 shrink-0 font-mono">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+
+                    <span className="text-xs font-bold text-slate-800 flex-1 font-sans">
+                      {channel.label}
+                    </span>
+
+                    {isAiDetected && (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-[#1E3A8A] bg-blue-100 px-2 py-0.5 rounded-full font-display shrink-0">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        AI Detected
+                      </span>
+                    )}
+
+                    <span
+                      className="shrink-0 flex items-center justify-center transition-all duration-200"
+                      style={{
+                        opacity: channel.checked ? 1 : 0,
+                        transform: channel.checked ? 'scale(1)' : 'scale(0.6)',
+                      }}
+                    >
+                      <CheckCircle2 className="w-5 h-5 text-[#1E3A8A]" strokeWidth={2.25} />
+                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {errors.channels && (
