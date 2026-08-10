@@ -115,13 +115,18 @@ export interface RiskItem {
 
 export interface SellingShareholder {
   name: string;
+  category: 'Promoter' | 'Promoter Group' | 'Public (FPI)' | 'Public (DII)' | 'Public (Other)';
+  preIssueShares: number;
   sharesOffered: number;
 }
 
 export interface ESOPDetails {
+  active: boolean;
   poolSize: number;
   vestingSchedule: string;
-  active: boolean;
+  schemeName: string;
+  totalOptionsGranted: number;
+  hasConvertibles: 'Yes' | 'No' | '';
 }
 
 export interface MaterialContract {
@@ -131,11 +136,22 @@ export interface MaterialContract {
   renewalTerms: string;
 }
 
-export interface WizardFormData {
-  // ============================================================
-  // STEP 1 — GENERAL & ISSUER IDENTITY
-  // ============================================================
+export interface UploadedFileMeta {
+  name: string;
+  size: number;
+  uploadedAt: string;
+}
 
+export interface CapitalHistoryRecord {
+  date: string;
+  sharesAllotted: number;
+  faceValue: number;
+  issuePrice: number;
+  considerationType: 'Cash' | 'Bonus' | 'Other' | '';
+  isAiExtracted?: boolean;
+}
+
+export interface WizardFormData {
   cin: string;
   companyName: string;
   dateOfIncorporation: string;
@@ -182,37 +198,44 @@ export interface WizardFormData {
   subBrandLogos: LogoAsset[];
   ratingAgencyLogos: LogoAsset[];
 
-  // ============================================================
-  // STEP 2 — OFFER DETAILS & CAPITAL STRUCTURE
-  // ============================================================
-
   authorisedCapital: number;
   paidUpCapital: number;
   promoterShareholdingPercentage: number;
   fiiShareholdingPercentage: number;
 
-  offerStructure: 'Fresh Issue' | 'Offer for Sale (OFS)' | 'Combination' | '';
+  offerStructure:
+    | 'Fresh Issue Only'
+    | 'Offer for Sale (OFS) Only'
+    | 'Fresh Issue + Offer for Sale (OFS)'
+    | '';
 
   proposedShares: number;
   faceValuePerShare: number;
+  capPrice: number;
   issueSize: number;
+
+  preIssueTotalShares: number;
+  preIssuePromoterShares: number;
 
   sellingShareholders: SellingShareholder[];
 
   objectsOfOffer: string;
+  objectsOfOfferCategories: string[];
+  objectsOfOfferAmounts: Record<string, number>;
 
   esopDetails: ESOPDetails;
 
-  // ============================================================
-  // STEP 3 — INDUSTRY & BUSINESS OPERATIONS
-  // ============================================================
+  egmAgmDate: string;
+  maxAuthorizedIssueLimit: number;
+  ipoAuthorizationDoc: UploadedFileMeta | null;
+
+  capitalStructureDoc1: UploadedFileMeta | null;
+  capitalStructureDoc2: UploadedFileMeta | null;
+  capitalHistoryRecords: CapitalHistoryRecord[];
 
   coreOperationalPillars: string;
-
   jointVenturesPartnerships: string;
-
   competitiveNarrative: string;
-
   proprietaryTechnology: string;
 
   materialContracts: MaterialContract[];
@@ -223,16 +246,11 @@ export interface WizardFormData {
   products: ProductItem[];
 
   sectorsServed: string[];
-
   sectorBreakdowns: Record<string, SectorBreakdown>;
 
   capacityValue: number;
   capacityUnit: string;
   capacityUtilization: number;
-
-  // ============================================================
-  // STEP 4 — GOVERNANCE
-  // ============================================================
 
   boardOfDirectors: string;
   remunerationDetails: string;
@@ -242,12 +260,7 @@ export interface WizardFormData {
   executiveAttritionExplanation: string;
 
   remunerationRationale: string;
-
   employmentTerms: string;
-
-  // ============================================================
-  // STEP 5 — FINANCIALS
-  // ============================================================
 
   consolidatedTotalIncome: number;
   netIncomeFromOperations: number;
@@ -272,14 +285,8 @@ export interface WizardFormData {
 
   attachedDocs: string[];
 
-  // ============================================================
-  // STEP 6 — LEGAL / LITIGATION
-  // ============================================================
-
   materialCreditorDues: string;
-
   pendingLitigationDetails: string;
-
   materialityAssessment: 'Material' | 'Immaterial' | '';
 
   regulatoryApprovalsConfirmed: boolean;
@@ -290,10 +297,6 @@ export interface WizardFormData {
   hasPendingLitigation: 'yes' | 'no' | '';
   hasRegulatoryAction: 'yes' | 'no' | '';
   hasDefaultHistory: 'yes' | 'no' | '';
-
-  // ============================================================
-  // STEP 7 — RISK
-  // ============================================================
 
   liquidityRiskManagement: string;
   fundingConcentration: string;
@@ -309,10 +312,6 @@ export interface WizardFormData {
 
   hasOtherRisks: boolean;
   otherRisksDescription: string;
-
-  // ============================================================
-  // STEP 8 — EXECUTION
-  // ============================================================
 
   secretarialAuditDeclarations: string;
   ceoCfoCertifications: string;
@@ -332,10 +331,6 @@ export interface WizardFormData {
   complianceCheck2: boolean;
   complianceCheck3: boolean;
 
-  // ============================================================
-  // OLD FIELDS — kept so existing panels don't break
-  // ============================================================
-
   marketChannels: MarketChannel[];
   primaryRevenueModel: string;
 
@@ -344,30 +339,12 @@ export interface WizardFormData {
 }
 
 export const DEFAULT_MARKET_CHANNELS: MarketChannel[] = [
-  {
-    label: 'Direct Institutional Sales (B2B/B2G)',
-    checked: false,
-  },
-  {
-    label: 'Public Tender & Government E-Procurement',
-    checked: false,
-  },
-  {
-    label: 'Channel Partners / Authorized Distributors',
-    checked: false,
-  },
-  {
-    label: 'Export Markets (International Sales)',
-    checked: false,
-  },
-  {
-    label: 'Digital / E-commerce Storefront',
-    checked: false,
-  },
-  {
-    label: 'Original Equipment Manufacturer (OEM) Supply',
-    checked: false,
-  },
+  { label: 'Direct Institutional Sales (B2B/B2G)', checked: false },
+  { label: 'Public Tender & Government E-Procurement', checked: false },
+  { label: 'Channel Partners / Authorized Distributors', checked: false },
+  { label: 'Export Markets (International Sales)', checked: false },
+  { label: 'Digital / E-commerce Storefront', checked: false },
+  { label: 'Original Equipment Manufacturer (OEM) Supply', checked: false },
 ];
 
 export const INDIAN_STATES = [
@@ -410,10 +387,6 @@ export const INDIAN_STATES = [
 ];
 
 export const DEFAULT_WIZARD_DATA: WizardFormData = {
-  // ============================================================
-  // STEP 1 — JIO DEMO DATA
-  // ============================================================
-
   cin: '',
   companyName: '',
   dateOfIncorporation: '',
@@ -523,10 +496,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   subBrandLogos: [],
   ratingAgencyLogos: [],
 
-  // ============================================================
-  // STEP 2
-  // ============================================================
-
   authorisedCapital: 0,
   paidUpCapital: 0,
   promoterShareholdingPercentage: 0,
@@ -535,21 +504,34 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   offerStructure: '',
   proposedShares: 0,
   faceValuePerShare: 0,
+  capPrice: 0,
   issueSize: 0,
+
+  preIssueTotalShares: 0,
+  preIssuePromoterShares: 0,
 
   sellingShareholders: [],
 
   objectsOfOffer: '',
+  objectsOfOfferCategories: [],
+  objectsOfOfferAmounts: {},
 
   esopDetails: {
     poolSize: 0,
     vestingSchedule: '',
     active: false,
+    schemeName: '',
+    totalOptionsGranted: 0,
+    hasConvertibles: '',
   },
 
-  // ============================================================
-  // STEP 3
-  // ============================================================
+  egmAgmDate: '',
+  maxAuthorizedIssueLimit: 0,
+  ipoAuthorizationDoc: null,
+
+  capitalStructureDoc1: null,
+  capitalStructureDoc2: null,
+  capitalHistoryRecords: [],
 
   coreOperationalPillars: '',
   jointVenturesPartnerships: '',
@@ -578,10 +560,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   capacityUnit: 'Customers / month',
   capacityUtilization: 0,
 
-  // ============================================================
-  // STEP 4
-  // ============================================================
-
   boardOfDirectors: '',
   remunerationDetails: '',
   boardCommittees: '',
@@ -591,10 +569,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
 
   remunerationRationale: '',
   employmentTerms: '',
-
-  // ============================================================
-  // STEP 5
-  // ============================================================
 
   consolidatedTotalIncome: 0,
   netIncomeFromOperations: 0,
@@ -619,10 +593,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
 
   attachedDocs: [],
 
-  // ============================================================
-  // STEP 6
-  // ============================================================
-
   materialCreditorDues: '',
   pendingLitigationDetails: '',
   materialityAssessment: '',
@@ -635,10 +605,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   hasPendingLitigation: '',
   hasRegulatoryAction: '',
   hasDefaultHistory: '',
-
-  // ============================================================
-  // STEP 7
-  // ============================================================
 
   liquidityRiskManagement: '',
   fundingConcentration: '',
@@ -676,10 +642,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   hasOtherRisks: false,
   otherRisksDescription: '',
 
-  // ============================================================
-  // STEP 8
-  // ============================================================
-
   secretarialAuditDeclarations: '',
   ceoCfoCertifications: '',
 
@@ -697,10 +659,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   complianceCheck1: false,
   complianceCheck2: false,
   complianceCheck3: false,
-
-  // ============================================================
-  // EXISTING FIELDS
-  // ============================================================
 
   marketChannels: DEFAULT_MARKET_CHANNELS,
   primaryRevenueModel: '',
