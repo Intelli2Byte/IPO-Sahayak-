@@ -1,11 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef, useReducer } from 'react';
+import { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
 import gsap from 'gsap';
 import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { DocumentItem, Comment } from '@/data/mockData';
+
+// pdf.js needs a worker script. Resolving it through `import.meta.url` lets
+// Next.js's bundler (webpack or Turbopack) pull the worker file straight out
+// of the installed pdfjs-dist package and serve it locally — no CDN request,
+// and no risk of the CDN's file naming (which changed between pdfjs-dist
+// major versions, e.g. .mjs only appeared in v4+) mismatching the version
+// actually installed.
+if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.js',
+    import.meta.url
+  ).toString();
+}
 
 interface SplitDocumentViewerProps {
   document: DocumentItem | null;
@@ -93,24 +108,17 @@ function highlightsReducer(state: HighlightsState, action: HighlightsAction): Hi
 }
 
 // ============================================================
-// PDF COORDINATE HELPERS
+// PDF EXPORT COORDINATE HELPERS
 // ------------------------------------------------------------
-// Root cause of the export drift: `page.getSize()` (and
-// `getWidth()`/`getHeight()`) report the page's **MediaBox**.
-// But PDF viewers — including the browser's native iframe
-// viewer you're highlighting against — render the **CropBox**
-// (which defaults to the MediaBox only when no CropBox is
-// present). Many report/print-to-PDF pipelines emit a CropBox
-// that's smaller than, or offset from, the MediaBox. Because the
-// old code multiplied normalized coordinates by the MediaBox
-// size, the exported rectangle was scaled/positioned against a
-// box the user never actually saw — hence highlights lining up
-// perfectly on screen but drifting after download.
-//
-// These helpers resolve the *actual visible* box (CropBox,
-// falling back to MediaBox) plus the page's /Rotate value, and
-// use both consistently everywhere we convert between on-screen
-// normalized coordinates and PDF point coordinates.
+// pdf-lib's page.getSize() reports the page's MediaBox, but PDF
+// viewers (including pdf.js, which now drives the on-screen
+// canvas below) render the CropBox — which many report/export
+// pipelines set smaller than, or offset from, the MediaBox.
+// These helpers resolve the box that was actually *displayed*
+// (CropBox, falling back to MediaBox) plus rotation, so the
+// rectangle we draw at export time lands exactly where the user
+// saw it on screen, regardless of how the source PDF's boxes are
+// set up.
 // ============================================================
 
 function getPageContentBox(page: PDFPage): { x: number; y: number; width: number; height: number } {
@@ -141,9 +149,7 @@ function getPageDisplayInfo(page: PDFPage) {
 // Maps a highlight rect expressed in normalized (0-1) display coordinates
 // (top-left origin, y-down — matching the on-screen overlay) into the raw
 // PDF coordinate space `drawRectangle` expects (bottom-left origin, y-up,
-// relative to the page's absolute MediaBox origin). Accounts for both the
-// CropBox offset and page rotation, so it stays correct even if the source
-// PDF changes.
+// relative to the page's absolute MediaBox origin).
 function normalizedRectToPdfRect(
   norm: { x: number; y: number; width: number; height: number },
   page: PDFPage
@@ -197,16 +203,20 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   // Single source of truth for highlights + undo/redo stacks.
   const [highlightsState, dispatch] = useReducer(highlightsReducer, initialHighlightsState);
 
-  // Real PDF page size, read from the actual file via pdf-lib (falls back to A4
-  // until loaded). Same source of truth used at export time. This is now the
-  // *displayed* box (CropBox-aware, rotation-aware) rather than the raw
-  // MediaBox, so it matches what the iframe actually renders.
+  // Real PDF page size at scale=1 (CSS px == PDF points), read via pdf.js.
+  // This is the SAME box pdf.js will paint onto the canvas below, so the
+  // container div, the highlight overlay, and the exported PDF are all
+  // guaranteed to agree — no more guessing at what a native viewer's
+  // "zoom=100%" actually renders at.
   const [pageSize, setPageSize] = useState<{ width: number; height: number }>({ width: 595, height: 842 });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const highlightLayerRef = useRef<HTMLDivElement>(null);
+
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const renderTaskRef = useRef<RenderTask | null>(null);
 
   const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
 
@@ -215,7 +225,48 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
     setMounted(true);
   }, []);
 
-  // Load the REAL page dimensions from the actual PDF whenever the document changes.
+  // Renders the first page onto the canvas at the given CSS-pixel scale.
+  // Because we own the render call end-to-end, the canvas's on-screen size
+  // is EXACTLY `pageSize.width * scale` x `pageSize.height * scale` — no
+  // native-plugin DPI guesswork, so normalized click coordinates always
+  // correspond to the same fraction of the real page.
+  const renderPage = useCallback(async (scale: number) => {
+    const pdfDoc = pdfDocRef.current;
+    const canvas = canvasRef.current;
+    if (!pdfDoc || !canvas) return;
+
+    const page = await pdfDoc.getPage(1);
+    const viewport = page.getViewport({ scale });
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    const outputScale = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+    }
+
+    const task = page.render({
+      canvasContext: context,
+      viewport,
+      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+    });
+    renderTaskRef.current = task;
+
+    try {
+      await task.promise;
+    } catch (e) {
+      if ((e as { name?: string })?.name !== 'RenderingCancelledException') {
+        console.error('PDF render failed', e);
+      }
+    }
+  }, []);
+
+  // Load the document into pdf.js whenever it changes, and capture its true
+  // page size (at scale=1, so pageSize.width/height are literally CSS px
+  // per PDF point — this already accounts for CropBox and rotation).
   useEffect(() => {
     if (!docItem) return;
 
@@ -223,24 +274,50 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
 
     (async () => {
       try {
-        const response = await fetch(docItem.url);
-        const arrayBuffer = await response.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
-        const firstPage = pdfDoc.getPages()[0];
-        const { displayWidth, displayHeight } = getPageDisplayInfo(firstPage);
+        const loadingTask = pdfjsLib.getDocument(docItem.url);
+        const pdfDoc = await loadingTask.promise;
+        if (cancelled) {
+          pdfDoc.destroy();
+          return;
+        }
+
+        pdfDocRef.current?.destroy();
+        pdfDocRef.current = pdfDoc;
+
+        const page = await pdfDoc.getPage(1);
+        const baseViewport = page.getViewport({ scale: 1 });
         if (!cancelled) {
-          setPageSize({ width: displayWidth, height: displayHeight });
+          setPageSize({ width: baseViewport.width, height: baseViewport.height });
+          await renderPage(zoom);
         }
       } catch (e) {
-        console.error('Failed to read PDF page size, falling back to A4', e);
+        console.error('Failed to load PDF, falling back to A4', e);
         if (!cancelled) {
           setPageSize({ width: 595, height: 842 });
         }
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docItem?.id]);
+
+  // Re-render whenever zoom changes (document load above handles the first render).
+  useEffect(() => {
+    if (!docItem) return;
+    renderPage(zoom);
+  }, [zoom, docItem?.id, renderPage]);
+
+  // Clean up the pdf.js document when the viewer unmounts.
+  useEffect(() => {
+    return () => {
+      renderTaskRef.current?.cancel();
+      pdfDocRef.current?.destroy();
+      pdfDocRef.current = null;
+    };
+  }, []);
 
   // Load highlights from localStorage (document-specific) into the reducer
   useEffect(() => {
@@ -459,12 +536,9 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
           const page = pages[pageIndex];
 
           pageHighlights.forEach((highlight) => {
-            // Map the normalized on-screen rect into real PDF coordinates,
-            // using the same CropBox + rotation-aware box that was used to
-            // size the viewer in the first place. This is the fix: the old
-            // code multiplied straight by page.getSize() (MediaBox), which
-            // silently drifted whenever the PDF's CropBox differed from its
-            // MediaBox.
+            // Map the normalized on-screen rect (captured against the
+            // pdf.js-rendered canvas, so it's pixel-accurate to the real
+            // page) into real PDF coordinates, CropBox + rotation aware.
             const rect = normalizedRectToPdfRect(
               { x: highlight.x, y: highlight.y, width: highlight.width, height: highlight.height },
               page
@@ -693,23 +767,20 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
             }}
           >
             {/*
-              IMPORTANT FIX: removed `view=FitH`.
-              FitH tells the native PDF viewer to calculate its OWN scale to
-              fit the panel — a calculation we have zero visibility into, and
-              which can disagree with our own `pageSize.width * zoom` box math.
-              Using an explicit `zoom=` percentage instead removes that
-              ambiguity: the page renders at a literal percentage of its
-              intrinsic point size, matching our container exactly.
+              Rendered by pdf.js directly onto this canvas at scale=zoom.
+              Because WE control the render call, the canvas's CSS box is
+              guaranteed to be exactly pageSize.width*zoom x pageSize.height*zoom
+              — the same box normalized highlight coordinates are captured
+              against. This is what the old native-viewer iframe (with a
+              `#zoom=` fragment) could never guarantee: that plugin's
+              "100%" renders at ~1.33 CSS px per PDF point (96/72 DPI),
+              not 1:1, so the visible page was always larger than our box
+              and every highlight silently drifted on export.
             */}
-            <iframe
-              ref={iframeRef}
-              src={`${docItem.url}#toolbar=0&navpanes=0&statusbar=0&zoom=${Math.round(zoom * 100)}`}
-              className="absolute inset-0 w-full h-full border-0"
-              title={docItem.name}
-              style={{
-                pointerEvents: highlighterMode ? 'none' : 'auto',
-                overflow: 'hidden',
-              }}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full"
+              style={{ pointerEvents: highlighterMode ? 'none' : 'auto' }}
             />
 
             <div
