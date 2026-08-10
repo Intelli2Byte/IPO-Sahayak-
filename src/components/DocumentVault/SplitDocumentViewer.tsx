@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useReducer } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Send, User, MessageSquare, AlertCircle, FileText, CheckCircle2, ShieldCheck, ZoomIn, ZoomOut, Download, Undo, Redo, Highlighter, Eraser } from 'lucide-react';
 import gsap from 'gsap';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
 import { DocumentItem, Comment } from '@/data/mockData';
 
 interface SplitDocumentViewerProps {
@@ -17,67 +18,255 @@ interface HighlightRect {
   documentId: string;
   pageNumber: number;
   color: string;
-  // Normalized coordinates (0-1 range relative to page)
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
+// ============================================================
+// HIGHLIGHTS REDUCER — past/present/future pattern.
+// This replaces the old dual `highlights` + `history[]` state,
+// which could desync between the two under React's automatic
+// batching (the concrete cause of Undo/Eraser silently failing).
+// A reducer guarantees every transition is a single atomic step.
+// ============================================================
+interface HighlightsState {
+  past: HighlightRect[][];
+  present: HighlightRect[];
+  future: HighlightRect[][];
+}
+
+type HighlightsAction =
+  | { type: 'LOAD'; highlights: HighlightRect[] }
+  | { type: 'ADD'; highlight: HighlightRect }
+  | { type: 'CLEAR' }
+  | { type: 'UNDO' }
+  | { type: 'REDO' };
+
+const initialHighlightsState: HighlightsState = { past: [], present: [], future: [] };
+
+function highlightsReducer(state: HighlightsState, action: HighlightsAction): HighlightsState {
+  switch (action.type) {
+    case 'LOAD':
+      // Switching documents: reset undo/redo stacks entirely for the new doc.
+      return { past: [], present: action.highlights, future: [] };
+
+    case 'ADD':
+      return {
+        past: [...state.past, state.present],
+        present: [...state.present, action.highlight],
+        future: [] // any new action invalidates the redo stack
+      };
+
+    case 'CLEAR':
+      if (state.present.length === 0) return state;
+      return {
+        past: [...state.past, state.present],
+        present: [],
+        future: []
+      };
+
+    case 'UNDO': {
+      if (state.past.length === 0) return state;
+      const previous = state.past[state.past.length - 1];
+      return {
+        past: state.past.slice(0, -1),
+        present: previous,
+        future: [state.present, ...state.future]
+      };
+    }
+
+    case 'REDO': {
+      if (state.future.length === 0) return state;
+      const next = state.future[0];
+      return {
+        past: [...state.past, state.present],
+        present: next,
+        future: state.future.slice(1)
+      };
+    }
+
+    default:
+      return state;
+  }
+}
+
+// ============================================================
+// PDF COORDINATE HELPERS
+// ------------------------------------------------------------
+// Root cause of the export drift: `page.getSize()` (and
+// `getWidth()`/`getHeight()`) report the page's **MediaBox**.
+// But PDF viewers — including the browser's native iframe
+// viewer you're highlighting against — render the **CropBox**
+// (which defaults to the MediaBox only when no CropBox is
+// present). Many report/print-to-PDF pipelines emit a CropBox
+// that's smaller than, or offset from, the MediaBox. Because the
+// old code multiplied normalized coordinates by the MediaBox
+// size, the exported rectangle was scaled/positioned against a
+// box the user never actually saw — hence highlights lining up
+// perfectly on screen but drifting after download.
+//
+// These helpers resolve the *actual visible* box (CropBox,
+// falling back to MediaBox) plus the page's /Rotate value, and
+// use both consistently everywhere we convert between on-screen
+// normalized coordinates and PDF point coordinates.
+// ============================================================
+
+function getPageContentBox(page: PDFPage): { x: number; y: number; width: number; height: number } {
+  let box: { x: number; y: number; width: number; height: number } | undefined;
+  try {
+    box = page.getCropBox();
+  } catch {
+    box = undefined;
+  }
+  if (!box || box.width <= 0 || box.height <= 0) {
+    box = page.getMediaBox();
+  }
+  return box;
+}
+
+function getPageDisplayInfo(page: PDFPage) {
+  const box = getPageContentBox(page);
+  const rotation = ((page.getRotation().angle % 360) + 360) % 360;
+  const swapped = rotation === 90 || rotation === 270;
+  return {
+    box,
+    rotation,
+    displayWidth: swapped ? box.height : box.width,
+    displayHeight: swapped ? box.width : box.height,
+  };
+}
+
+// Maps a highlight rect expressed in normalized (0-1) display coordinates
+// (top-left origin, y-down — matching the on-screen overlay) into the raw
+// PDF coordinate space `drawRectangle` expects (bottom-left origin, y-up,
+// relative to the page's absolute MediaBox origin). Accounts for both the
+// CropBox offset and page rotation, so it stays correct even if the source
+// PDF changes.
+function normalizedRectToPdfRect(
+  norm: { x: number; y: number; width: number; height: number },
+  page: PDFPage
+) {
+  const { box, rotation, displayWidth, displayHeight } = getPageDisplayInfo(page);
+
+  const dispX = norm.x * displayWidth;
+  const dispY = norm.y * displayHeight;
+  const dispW = norm.width * displayWidth;
+  const dispH = norm.height * displayHeight;
+
+  const toLocal = (X: number, Y: number): [number, number] => {
+    switch (rotation) {
+      case 90:
+        return [Y, box.height - X];
+      case 180:
+        return [box.width - X, box.height - Y];
+      case 270:
+        return [box.width - Y, X];
+      default:
+        return [X, Y];
+    }
+  };
+
+  const [u0, v0] = toLocal(dispX, dispY);
+  const [u1, v1] = toLocal(dispX + dispW, dispY + dispH);
+
+  const uMin = Math.min(u0, u1);
+  const uMax = Math.max(u0, u1);
+  const vMin = Math.min(v0, v1);
+  const vMax = Math.max(v0, v1);
+
+  return {
+    x: box.x + uMin,
+    y: box.y + (box.height - vMax),
+    width: uMax - uMin,
+    height: vMax - vMin,
+  };
+}
+
 export default function SplitDocumentViewer({ document: docItem, onClose, onAddReply }: SplitDocumentViewerProps) {
   const [replyText, setReplyText] = useState('');
-  const [zoom, setZoom] = useState<number>(1.0); // Single source of truth: 1.0 = 100%
-  const [highlights, setHighlights] = useState<HighlightRect[]>([]);
+  const [zoom, setZoom] = useState<number>(1.0);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
   const [highlighterMode, setHighlighterMode] = useState<'yellow' | 'red' | null>(null);
-  const [history, setHistory] = useState<HighlightRect[][]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isExporting, setIsExporting] = useState<boolean>(false);
-  
+  const [mounted, setMounted] = useState(false);
+
+  // Single source of truth for highlights + undo/redo stacks.
+  const [highlightsState, dispatch] = useReducer(highlightsReducer, initialHighlightsState);
+
+  // Real PDF page size, read from the actual file via pdf-lib (falls back to A4
+  // until loaded). Same source of truth used at export time. This is now the
+  // *displayed* box (CropBox-aware, rotation-aware) rather than the raw
+  // MediaBox, so it matches what the iframe actually renders.
+  const [pageSize, setPageSize] = useState<{ width: number; height: number }>({ width: 595, height: 842 });
+
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const highlightLayerRef = useRef<HTMLDivElement>(null);
-  
+
   const isAnnotated = docItem ? (docItem.status === 'under_review' || docItem.comments.length > 0) : false;
 
-  // PDF page dimensions (standard A4 at 72 DPI - PDF points)
-  const PAGE_WIDTH = 595;
-  const PAGE_HEIGHT = 842;
-
-  // Load highlights from localStorage (document-specific)
+  // Portal mount guard - required for Next.js SSR
   useEffect(() => {
-    if (docItem) {
-      const stored = localStorage.getItem(`highlights_${docItem.id}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const documentHighlights = parsed.filter((h: HighlightRect) => h.documentId === docItem.id);
-          setHighlights(documentHighlights);
-          setHistory([documentHighlights]);
-          setHistoryIndex(0);
-        } catch (e) {
-          console.error('Failed to parse highlights', e);
-          setHighlights([]);
-          setHistory([[]]);
-          setHistoryIndex(0);
+    setMounted(true);
+  }, []);
+
+  // Load the REAL page dimensions from the actual PDF whenever the document changes.
+  useEffect(() => {
+    if (!docItem) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(docItem.url);
+        const arrayBuffer = await response.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        const firstPage = pdfDoc.getPages()[0];
+        const { displayWidth, displayHeight } = getPageDisplayInfo(firstPage);
+        if (!cancelled) {
+          setPageSize({ width: displayWidth, height: displayHeight });
         }
-      } else {
-        setHighlights([]);
-        setHistory([[]]);
-        setHistoryIndex(0);
+      } catch (e) {
+        console.error('Failed to read PDF page size, falling back to A4', e);
+        if (!cancelled) {
+          setPageSize({ width: 595, height: 842 });
+        }
       }
+    })();
+
+    return () => { cancelled = true; };
+  }, [docItem?.id]);
+
+  // Load highlights from localStorage (document-specific) into the reducer
+  useEffect(() => {
+    if (!docItem) return;
+
+    const stored = localStorage.getItem(`highlights_${docItem.id}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        const documentHighlights = parsed.filter((h: HighlightRect) => h.documentId === docItem.id);
+        dispatch({ type: 'LOAD', highlights: documentHighlights });
+      } catch (e) {
+        console.error('Failed to parse highlights', e);
+        dispatch({ type: 'LOAD', highlights: [] });
+      }
+    } else {
+      dispatch({ type: 'LOAD', highlights: [] });
     }
   }, [docItem?.id]);
 
-  // Save highlights to localStorage
+  // Persist current highlights to localStorage whenever they change
   useEffect(() => {
     if (docItem) {
-      localStorage.setItem(`highlights_${docItem.id}`, JSON.stringify(highlights));
+      localStorage.setItem(`highlights_${docItem.id}`, JSON.stringify(highlightsState.present));
     }
-  }, [highlights, docItem?.id]);
+  }, [highlightsState.present, docItem?.id]);
 
   // Prevent body scroll when modal opens
   useEffect(() => {
@@ -160,12 +349,10 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
     if (!pageContainerRef.current) return null;
 
     const rect = pageContainerRef.current.getBoundingClientRect();
-    
-    // Get mouse position relative to page container
+
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Normalize to 0-1 range (independent of zoom)
     const normalizedX = mouseX / rect.width;
     const normalizedY = mouseY / rect.height;
 
@@ -206,13 +393,11 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
       return;
     }
 
-    // Calculate rectangle (handle all drag directions)
     const x = Math.min(startPoint.x, currentPoint.x);
     const y = Math.min(startPoint.y, currentPoint.y);
     const width = Math.abs(currentPoint.x - startPoint.x);
     const height = Math.abs(currentPoint.y - startPoint.y);
 
-    // Only create highlight if it has meaningful size
     if (width > 0.01 && height > 0.01) {
       const newHighlight: HighlightRect = {
         id: `highlight_${Date.now()}`,
@@ -225,14 +410,7 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         height
       };
 
-      const newHighlights = [...highlights, newHighlight];
-      setHighlights(newHighlights);
-
-      // Update history
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push(newHighlights);
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
+      dispatch({ type: 'ADD', highlight: newHighlight });
     }
 
     setIsDrawing(false);
@@ -241,52 +419,33 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
   };
 
   const handleUndo = () => {
-    if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      setHighlights(history[historyIndex - 1]);
-    }
+    dispatch({ type: 'UNDO' });
   };
 
   const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      setHighlights(history[historyIndex + 1]);
-    }
+    dispatch({ type: 'REDO' });
   };
 
   const handleClearAll = () => {
-    if (!docItem) return;
-    
-    const newHighlights = highlights.filter(h => h.documentId !== docItem.id);
-    setHighlights(newHighlights);
-
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newHighlights);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+    dispatch({ type: 'CLEAR' });
   };
 
-  // Export PDF with highlights
   const handleDownloadWithHighlights = async () => {
     if (!docItem) return;
 
     setIsExporting(true);
 
     try {
-      // Fetch original PDF
       const response = await fetch(docItem.url);
       const arrayBuffer = await response.arrayBuffer();
 
-      // Load PDF document
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       const pages = pdfDoc.getPages();
 
-      // Get document-specific highlights
-      const documentHighlights = highlights.filter(h => h.documentId === docItem.id);
+      const documentHighlights = highlightsState.present.filter(h => h.documentId === docItem.id);
 
-      // Group highlights by page
       const highlightsByPage = documentHighlights.reduce((acc, highlight) => {
-        const pageIndex = highlight.pageNumber - 1; // Convert to 0-based index
+        const pageIndex = highlight.pageNumber - 1;
         if (!acc[pageIndex]) {
           acc[pageIndex] = [];
         }
@@ -294,39 +453,35 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         return acc;
       }, {} as Record<number, HighlightRect[]>);
 
-      // Draw highlights on each page
       Object.entries(highlightsByPage).forEach(([pageIndexStr, pageHighlights]) => {
         const pageIndex = parseInt(pageIndexStr);
         if (pageIndex >= 0 && pageIndex < pages.length) {
           const page = pages[pageIndex];
-          const { width: pageWidth, height: pageHeight } = page.getSize();
 
           pageHighlights.forEach((highlight) => {
-            // Convert normalized coordinates (0-1) to PDF points
-            const x = highlight.x * pageWidth;
-            const y = highlight.y * pageHeight;
-            const width = highlight.width * pageWidth;
-            const height = highlight.height * pageHeight;
+            // Map the normalized on-screen rect into real PDF coordinates,
+            // using the same CropBox + rotation-aware box that was used to
+            // size the viewer in the first place. This is the fix: the old
+            // code multiplied straight by page.getSize() (MediaBox), which
+            // silently drifted whenever the PDF's CropBox differed from its
+            // MediaBox.
+            const rect = normalizedRectToPdfRect(
+              { x: highlight.x, y: highlight.y, width: highlight.width, height: highlight.height },
+              page
+            );
 
-            // PDF coordinate system: origin at bottom-left
-            // Browser coordinate system: origin at top-left
-            // Convert Y coordinate
-            const pdfY = pageHeight - y - height;
-
-            // Parse color
-            let color = rgb(1, 1, 0); // Default yellow
+            let color = rgb(1, 1, 0);
             if (highlight.color === '#FDE047') {
-              color = rgb(0.992, 0.878, 0.278); // Yellow
+              color = rgb(0.992, 0.878, 0.278);
             } else if (highlight.color === '#FCA5A5') {
-              color = rgb(0.988, 0.647, 0.647); // Red
+              color = rgb(0.988, 0.647, 0.647);
             }
 
-            // Draw semi-transparent rectangle
             page.drawRectangle({
-              x,
-              y: pdfY,
-              width,
-              height,
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
               color,
               opacity: 0.4,
               borderWidth: 0
@@ -335,27 +490,23 @@ export default function SplitDocumentViewer({ document: docItem, onClose, onAddR
         }
       });
 
-      // Save modified PDF
       const pdfBytes = await pdfDoc.save();
 
-// Create download — wrap bytes to satisfy BlobPart's ArrayBuffer typing
-const blob = new Blob([new Uint8Array(pdfBytes)], {
-  type: 'application/pdf'
-});
+      const blob = new Blob([new Uint8Array(pdfBytes)], {
+        type: 'application/pdf'
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
-      // Generate filename
+
       const originalName = docItem.fileName.replace(/\.pdf$/i, '');
       link.download = `${originalName}-highlighted.pdf`;
-      
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      // Show success message
       gsap.fromTo('.export-success',
         { opacity: 0, y: -20 },
         { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }
@@ -378,14 +529,14 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
     }
   };
 
-  if (!docItem) return null;
+  if (!docItem || !mounted) return null;
 
-  // Calculate dynamic highlight counts for THIS document only
-  const documentHighlights = highlights.filter(h => h.documentId === docItem.id);
-  const yellowCount = documentHighlights.filter(h => h.color === '#FDE047').length;
-  const redCount = documentHighlights.filter(h => h.color === '#FCA5A5').length;
+  const currentHighlights = highlightsState.present.filter(h => h.documentId === docItem.id);
+  const yellowCount = currentHighlights.filter(h => h.color === '#FDE047').length;
+  const redCount = currentHighlights.filter(h => h.color === '#FCA5A5').length;
+  const canUndo = highlightsState.past.length > 0;
+  const canRedo = highlightsState.future.length > 0;
 
-  // Calculate current drag rectangle (normalized coordinates)
   let dragRect: { x: number; y: number; width: number; height: number } | null = null;
   if (isDrawing && startPoint && currentPoint) {
     dragRect = {
@@ -396,8 +547,8 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
     };
   }
 
-  return (
-    <div 
+  return createPortal(
+    <div
       ref={containerRef}
       className="fixed inset-0 z-50 bg-slate-900 flex flex-col md:flex-row overflow-hidden select-none"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -409,8 +560,8 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
       </div>
 
       {/* LEFT PANEL: Document Viewer */}
-      <div className="flex-1 flex flex-col h-full border-r border-slate-800 bg-slate-950 relative overflow-hidden">
-        
+      <div className="flex-1 flex flex-col h-full min-w-0 min-h-0 border-r border-slate-800 bg-slate-950 relative overflow-hidden">
+
         {/* Header */}
         <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-2">
@@ -423,7 +574,7 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
             <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-full">
               Digital Highlighter • {Math.round(zoom * 100)}% View
             </span>
-            <button 
+            <button
               onClick={handleClose}
               className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700 ml-2"
               title="Close Viewer"
@@ -436,7 +587,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
         {/* Toolbar */}
         <div className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-4">
-            {/* Zoom Controls */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handleZoomOut}
@@ -465,7 +615,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Highlighter Buttons */}
             <button
               onClick={() => setHighlighterMode(highlighterMode === 'yellow' ? null : 'yellow')}
               className={`px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center gap-2 text-xs font-bold border ${
@@ -492,21 +641,19 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
               <span className="w-4 h-4 rounded bg-red-400"></span>
             </button>
 
-            {/* Clear All */}
             <button
               onClick={handleClearAll}
-              disabled={documentHighlights.length === 0}
+              disabled={currentHighlights.length === 0}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
               title="Clear All Highlights"
             >
               <Eraser className="w-4 h-4" />
             </button>
 
-            {/* Undo/Redo */}
             <div className="flex items-center gap-2 border-l border-slate-700 pl-3">
               <button
                 onClick={handleUndo}
-                disabled={historyIndex <= 0}
+                disabled={!canUndo}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
                 title="Undo"
               >
@@ -514,7 +661,7 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
               </button>
               <button
                 onClick={handleRedo}
-                disabled={historyIndex >= history.length - 1}
+                disabled={!canRedo}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700"
                 title="Redo"
               >
@@ -522,7 +669,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
               </button>
             </div>
 
-            {/* Download with Highlights */}
             <button
               onClick={handleDownloadWithHighlights}
               disabled={isExporting}
@@ -535,34 +681,43 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
           </div>
         </div>
 
-        {/* Document Canvas - PROPER COORDINATE SYSTEM */}
-        <div className="flex-1 w-full relative overflow-auto bg-slate-900 flex justify-center items-start p-8">
-          <div 
+        {/* SINGLE DEDICATED SCROLL CANVAS */}
+        <div className="flex-1 min-w-0 min-h-0 w-full overflow-auto bg-slate-900 p-8">
+          <div
             ref={pageContainerRef}
             className="relative bg-white shadow-2xl"
             style={{
-              width: `${PAGE_WIDTH * zoom}px`,
-              height: `${PAGE_HEIGHT * zoom}px`,
-              position: 'relative'
+              width: `${pageSize.width * zoom}px`,
+              height: `${pageSize.height * zoom}px`,
+              margin: '0 auto',
             }}
           >
-            {/* PDF iframe */}
+            {/*
+              IMPORTANT FIX: removed `view=FitH`.
+              FitH tells the native PDF viewer to calculate its OWN scale to
+              fit the panel — a calculation we have zero visibility into, and
+              which can disagree with our own `pageSize.width * zoom` box math.
+              Using an explicit `zoom=` percentage instead removes that
+              ambiguity: the page renders at a literal percentage of its
+              intrinsic point size, matching our container exactly.
+            */}
             <iframe
               ref={iframeRef}
-              src={`${docItem.url}#view=FitH&zoom=${Math.round(zoom * 100)}`}
+              src={`${docItem.url}#toolbar=0&navpanes=0&statusbar=0&zoom=${Math.round(zoom * 100)}`}
               className="absolute inset-0 w-full h-full border-0"
               title={docItem.name}
-              style={{ pointerEvents: highlighterMode ? 'none' : 'auto' }}
+              style={{
+                pointerEvents: highlighterMode ? 'none' : 'auto',
+                overflow: 'hidden',
+              }}
             />
 
-            {/* Highlight Layer - PERFECTLY ALIGNED */}
             <div
               ref={highlightLayerRef}
               className="absolute inset-0 pointer-events-none"
               style={{ overflow: 'hidden' }}
             >
-              {/* Existing highlights */}
-              {documentHighlights.map((highlight) => (
+              {currentHighlights.map((highlight) => (
                 <div
                   key={highlight.id}
                   className="absolute"
@@ -578,7 +733,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
                 />
               ))}
 
-              {/* Current drag preview */}
               {dragRect && (
                 <div
                   className="absolute"
@@ -596,7 +750,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
               )}
             </div>
 
-            {/* Interaction Layer - CAPTURES MOUSE EVENTS */}
             {highlighterMode && (
               <div
                 className="absolute inset-0"
@@ -613,7 +766,6 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
             )}
           </div>
 
-          {/* Highlighter Mode Indicator */}
           {highlighterMode && (
             <div className="fixed top-24 left-8 bg-slate-900/90 border border-slate-700 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl z-20">
               <p className="text-xs font-bold text-slate-100 flex items-center gap-2">
@@ -627,9 +779,9 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
         </div>
       </div>
 
-      {/* RIGHT PANEL: Metadata (unchanged from previous version) */}
+      {/* RIGHT PANEL: Metadata (unchanged) */}
       <div className="w-full md:w-96 bg-white flex flex-col justify-between h-full border-t md:border-t-0 border-slate-200 overflow-hidden">
-        
+
         {isAnnotated ? (
           <>
             <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50 shrink-0">
@@ -639,7 +791,7 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
                 </span>
                 <h3 className="text-xs font-bold text-slate-800 mt-1.5 line-clamp-1">{docItem.name}</h3>
               </div>
-              <button 
+              <button
                 onClick={handleClose}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
               >
@@ -661,11 +813,11 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
               {docItem.comments.map((comment) => {
                 const isReviewer = comment.author.includes('Reviewer') || comment.author.includes('SEBI');
                 return (
-                  <div 
+                  <div
                     key={comment.id}
                     className={`stagger-entry p-3 rounded-xl border flex items-start gap-2.5 max-w-[85%] ${
-                      isReviewer 
-                        ? 'border-warning/15 bg-warning/5 text-warning ml-0' 
+                      isReviewer
+                        ? 'border-warning/15 bg-warning/5 text-warning ml-0'
                         : 'border-primary/15 bg-primary-subtle/25 text-primary ml-auto flex-row-reverse'
                     }`}
                   >
@@ -687,14 +839,14 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
             <form onSubmit={handleSubmitReply} className="p-4 border-t border-slate-200 bg-slate-50 shrink-0">
               <div className="chat-send-box flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                 <MessageSquare className="w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Clarify annotations or submit replies..." 
+                <input
+                  type="text"
+                  placeholder="Clarify annotations or submit replies..."
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   className="flex-1 text-xs border-0 focus:ring-0 focus:outline-none py-1.5 text-slate-800 bg-white font-semibold placeholder-slate-450"
                 />
-                <button 
+                <button
                   type="submit"
                   disabled={!replyText.trim()}
                   className={`p-2 rounded-lg text-white transition-all cursor-pointer ${
@@ -718,7 +870,7 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
                 </span>
                 <h3 className="text-xs font-bold text-slate-850 mt-1.5 line-clamp-1">{docItem.name}</h3>
               </div>
-              <button 
+              <button
                 onClick={handleClose}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
               >
@@ -779,6 +931,7 @@ const blob = new Blob([new Uint8Array(pdfBytes)], {
         )}
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
