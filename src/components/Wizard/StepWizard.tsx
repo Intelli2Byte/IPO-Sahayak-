@@ -28,7 +28,9 @@ import PanelEight_FinalReview from './PanelEight_FinalReview';
 import { WizardFormData, DEFAULT_WIZARD_DATA } from './wizardTypes';
 
 const STORAGE_KEY = 'amti-ipo-wizard-state';
-const STORAGE_VERSION = 2;
+// Bumped: schema gained Step 3 Financial Dossier fields
+// (financialDocuments, indebtednessRecords, mdaSections, etc.)
+const STORAGE_VERSION = 3;
 
 const STEPS = [
   { num: 1, name: 'Corporate Identity', icon: Building2 },
@@ -122,6 +124,36 @@ function mergeWithDefaults(
       ? s.attachedDocs
       : DEFAULT_WIZARD_DATA.attachedDocs,
 
+    // NEW — Financial Dossier (Step 3) safe migration
+    financialDocuments:
+      Array.isArray(s.financialDocuments) && s.financialDocuments.length > 0
+        ? s.financialDocuments
+        : DEFAULT_WIZARD_DATA.financialDocuments,
+
+    financialExtractionStatus:
+      s.financialExtractionStatus === 'parsing' ||
+      s.financialExtractionStatus === 'done'
+        ? s.financialExtractionStatus
+        : DEFAULT_WIZARD_DATA.financialExtractionStatus,
+
+    kpiEditAudit:
+      s.kpiEditAudit && typeof s.kpiEditAudit === 'object'
+        ? s.kpiEditAudit
+        : DEFAULT_WIZARD_DATA.kpiEditAudit,
+
+    indebtednessRecords: Array.isArray(s.indebtednessRecords)
+      ? s.indebtednessRecords
+      : DEFAULT_WIZARD_DATA.indebtednessRecords,
+
+    mdaSections: {
+      ...DEFAULT_WIZARD_DATA.mdaSections,
+      ...(s.mdaSections && typeof s.mdaSections === 'object'
+        ? s.mdaSections
+        : {}),
+    },
+
+    mdaActiveTab: s.mdaActiveTab ?? DEFAULT_WIZARD_DATA.mdaActiveTab,
+
     risks:
       Array.isArray(s.risks) && s.risks.length > 0
         ? s.risks
@@ -193,17 +225,22 @@ function validateStep(
       }
       break;
 
-    case 3:
+    case 3: {
       if (d.fy26Revenue <= 0) {
         errors.fy26Revenue =
           'Most recent fiscal year revenue is required.';
       }
 
-      if (d.attachedDocs.length === 0) {
-        errors.attachedDocs =
-          'At least one supporting financial document must be attached.';
+      const missingRequiredDocs = d.financialDocuments.some(
+        (doc) => doc.required && !doc.file && !doc.reusedFromStep
+      );
+
+      if (missingRequiredDocs) {
+        errors.financialDocuments =
+          'All required financial documents must be uploaded.';
       }
       break;
+    }
 
     case 4:
       if (!d.marketChannels.some((c) => c.checked)) {
