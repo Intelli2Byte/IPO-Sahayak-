@@ -25,12 +25,27 @@ import PanelFive_UseOfFundsLedger, {
 import PanelSix_RiskAssessment from './PanelSix_RiskAssessment';
 import PanelSeven_LegalDisclosures from './PanelSeven_LegalDisclosures';
 import PanelEight_FinalReview from './PanelEight_FinalReview';
-import { WizardFormData, DEFAULT_WIZARD_DATA } from './wizardTypes';
+
+import {
+  WizardFormData,
+  DEFAULT_WIZARD_DATA,
+} from './wizardTypes';
 
 const STORAGE_KEY = 'amti-ipo-wizard-state';
-// Bumped: schema gained Step 3 Financial Dossier fields
-// (financialDocuments, indebtednessRecords, mdaSections, etc.)
-const STORAGE_VERSION = 3;
+
+/**
+ * Schema version 4
+ *
+ * Step 3 Financial Dossier now contains:
+ * - financialDocuments
+ * - financialExtractionStatus
+ * - ebitdaMargin
+ * - indebtednessRecords
+ * - mdaSections
+ * - mdaActiveTab
+ * - kpiEditAudit
+ */
+const STORAGE_VERSION = 4;
 
 const STEPS = [
   { num: 1, name: 'Corporate Identity', icon: Building2 },
@@ -44,10 +59,13 @@ const STEPS = [
 ];
 
 /**
- * Deep-merges persisted formData over DEFAULT_WIZARD_DATA so that any field
- * added to the schema after a user's session was saved (new arrays, new
- * nested object keys) always falls back safely to its default value instead
- * of being undefined at runtime.
+ * Deep-merges persisted formData over DEFAULT_WIZARD_DATA.
+ *
+ * This is intentionally defensive because users may have an older
+ * localStorage session created before the current WizardFormData schema.
+ *
+ * Existing user data is preserved wherever possible.
+ * New fields safely fall back to DEFAULT_WIZARD_DATA.
  */
 function mergeWithDefaults(
   saved: Partial<WizardFormData> | undefined | null
@@ -89,16 +107,21 @@ function mergeWithDefaults(
       ? s.sellingShareholders
       : DEFAULT_WIZARD_DATA.sellingShareholders,
 
-    objectsOfOfferCategories: Array.isArray(s.objectsOfOfferCategories)
+    objectsOfOfferCategories: Array.isArray(
+      s.objectsOfOfferCategories
+    )
       ? s.objectsOfOfferCategories
       : DEFAULT_WIZARD_DATA.objectsOfOfferCategories,
 
     objectsOfOfferAmounts:
-      s.objectsOfOfferAmounts && typeof s.objectsOfOfferAmounts === 'object'
+      s.objectsOfOfferAmounts &&
+      typeof s.objectsOfOfferAmounts === 'object'
         ? s.objectsOfOfferAmounts
         : DEFAULT_WIZARD_DATA.objectsOfOfferAmounts,
 
-    capitalHistoryRecords: Array.isArray(s.capitalHistoryRecords)
+    capitalHistoryRecords: Array.isArray(
+      s.capitalHistoryRecords
+    )
       ? s.capitalHistoryRecords
       : DEFAULT_WIZARD_DATA.capitalHistoryRecords,
 
@@ -116,7 +139,8 @@ function mergeWithDefaults(
       : DEFAULT_WIZARD_DATA.sectorsServed,
 
     sectorBreakdowns:
-      s.sectorBreakdowns && typeof s.sectorBreakdowns === 'object'
+      s.sectorBreakdowns &&
+      typeof s.sectorBreakdowns === 'object'
         ? s.sectorBreakdowns
         : DEFAULT_WIZARD_DATA.sectorBreakdowns,
 
@@ -124,9 +148,15 @@ function mergeWithDefaults(
       ? s.attachedDocs
       : DEFAULT_WIZARD_DATA.attachedDocs,
 
-    // NEW — Financial Dossier (Step 3) safe migration
+    /**
+     * ---------------------------------------------------------
+     * Step 3 — Financial Dossier migration
+     * ---------------------------------------------------------
+     */
+
     financialDocuments:
-      Array.isArray(s.financialDocuments) && s.financialDocuments.length > 0
+      Array.isArray(s.financialDocuments) &&
+      s.financialDocuments.length > 0
         ? s.financialDocuments
         : DEFAULT_WIZARD_DATA.financialDocuments,
 
@@ -136,23 +166,40 @@ function mergeWithDefaults(
         ? s.financialExtractionStatus
         : DEFAULT_WIZARD_DATA.financialExtractionStatus,
 
-    kpiEditAudit:
-      s.kpiEditAudit && typeof s.kpiEditAudit === 'object'
-        ? s.kpiEditAudit
-        : DEFAULT_WIZARD_DATA.kpiEditAudit,
+    ebitdaMargin:
+      typeof s.ebitdaMargin === 'number' &&
+      Number.isFinite(s.ebitdaMargin)
+        ? s.ebitdaMargin
+        : DEFAULT_WIZARD_DATA.ebitdaMargin,
 
-    indebtednessRecords: Array.isArray(s.indebtednessRecords)
+    indebtednessRecords: Array.isArray(
+      s.indebtednessRecords
+    )
       ? s.indebtednessRecords
       : DEFAULT_WIZARD_DATA.indebtednessRecords,
 
-    mdaSections: {
-      ...DEFAULT_WIZARD_DATA.mdaSections,
-      ...(s.mdaSections && typeof s.mdaSections === 'object'
+    mdaSections:
+      s.mdaSections &&
+      typeof s.mdaSections === 'object'
         ? s.mdaSections
-        : {}),
-    },
+        : DEFAULT_WIZARD_DATA.mdaSections,
 
-    mdaActiveTab: s.mdaActiveTab ?? DEFAULT_WIZARD_DATA.mdaActiveTab,
+    mdaActiveTab:
+      typeof s.mdaActiveTab === 'string'
+        ? s.mdaActiveTab
+        : DEFAULT_WIZARD_DATA.mdaActiveTab,
+
+    kpiEditAudit:
+      s.kpiEditAudit &&
+      typeof s.kpiEditAudit === 'object'
+        ? s.kpiEditAudit
+        : DEFAULT_WIZARD_DATA.kpiEditAudit,
+
+    /**
+     * ---------------------------------------------------------
+     * Existing arrays / nested objects
+     * ---------------------------------------------------------
+     */
 
     risks:
       Array.isArray(s.risks) && s.risks.length > 0
@@ -160,12 +207,14 @@ function mergeWithDefaults(
         : DEFAULT_WIZARD_DATA.risks,
 
     marketChannels:
-      Array.isArray(s.marketChannels) && s.marketChannels.length > 0
+      Array.isArray(s.marketChannels) &&
+      s.marketChannels.length > 0
         ? s.marketChannels
         : DEFAULT_WIZARD_DATA.marketChannels,
 
     fundingAllocations:
-      Array.isArray(s.fundingAllocations) && s.fundingAllocations.length > 0
+      Array.isArray(s.fundingAllocations) &&
+      s.fundingAllocations.length > 0
         ? s.fundingAllocations
         : DEFAULT_WIZARD_DATA.fundingAllocations,
 
@@ -184,13 +233,17 @@ function mergeWithDefaults(
       ...(s.auditor ?? {}),
     },
 
-    ipoAuthorizationDoc: s.ipoAuthorizationDoc ?? null,
+    ipoAuthorizationDoc:
+      s.ipoAuthorizationDoc ?? null,
 
-    capitalStructureDoc1: s.capitalStructureDoc1 ?? null,
+    capitalStructureDoc1:
+      s.capitalStructureDoc1 ?? null,
 
-    capitalStructureDoc2: s.capitalStructureDoc2 ?? null,
+    capitalStructureDoc2:
+      s.capitalStructureDoc2 ?? null,
 
-    issuerLogo: s.issuerLogo ?? undefined,
+    issuerLogo:
+      s.issuerLogo ?? undefined,
   };
 }
 
@@ -203,12 +256,15 @@ function validateStep(
   switch (step) {
     case 1:
       if (!d.cin || d.cin.length !== 21) {
-        errors.cin = 'A valid 21-character CIN is required.';
+        errors.cin =
+          'A valid 21-character CIN is required.';
       }
 
       if (!d.companyName) {
-        errors.companyName = 'Company name is required.';
+        errors.companyName =
+          'Company name is required.';
       }
+
       break;
 
     case 2:
@@ -221,8 +277,10 @@ function validateStep(
         d.products.length === 0 ||
         d.products.some((p) => !p.name)
       ) {
-        errors.products = 'Every product/service needs a name.';
+        errors.products =
+          'Every product/service needs a name.';
       }
+
       break;
 
     case 3: {
@@ -231,22 +289,32 @@ function validateStep(
           'Most recent fiscal year revenue is required.';
       }
 
-      const missingRequiredDocs = d.financialDocuments.some(
-        (doc) => doc.required && !doc.file && !doc.reusedFromStep
-      );
+      const missingRequiredDocs =
+        d.financialDocuments.some(
+          (doc) =>
+            doc.required &&
+            !doc.file &&
+            !doc.reusedFromStep
+        );
 
       if (missingRequiredDocs) {
         errors.financialDocuments =
           'All required financial documents must be uploaded.';
       }
+
       break;
     }
 
     case 4:
-      if (!d.marketChannels.some((c) => c.checked)) {
+      if (
+        !d.marketChannels.some(
+          (c) => c.checked
+        )
+      ) {
         errors.channels =
           'Select at least one monetization channel.';
       }
+
       break;
 
     case 5:
@@ -254,13 +322,19 @@ function validateStep(
         errors.ledger =
           'Use of Funds ledger must total exactly 100%.';
       }
+
       break;
 
     case 6:
-      if (d.risks.some((r) => !r.title || !r.description)) {
+      if (
+        d.risks.some(
+          (r) => !r.title || !r.description
+        )
+      ) {
         errors.risks =
           'All mandatory risk factors must be completed.';
       }
+
       break;
 
     case 7:
@@ -268,6 +342,7 @@ function validateStep(
         errors.affidavit =
           'Affidavit declarations must be answered.';
       }
+
       break;
   }
 
@@ -275,36 +350,69 @@ function validateStep(
 }
 
 export default function StepWizard() {
-  const [activeStep, setActiveStep] = useState<number>(1);
+  const [activeStep, setActiveStep] =
+    useState<number>(1);
+
   const [formData, setFormData] =
-    useState<WizardFormData>(DEFAULT_WIZARD_DATA);
+    useState<WizardFormData>(
+      DEFAULT_WIZARD_DATA
+    );
+
   const [errors, setErrors] =
     useState<Record<string, string>>({});
-  const [hydrated, setHydrated] = useState(false);
+
+  const [hydrated, setHydrated] =
+    useState(false);
+
   const [highestStepVisited, setHighestStepVisited] =
     useState<number>(1);
 
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const sheetRef =
+    useRef<HTMLDivElement>(null);
+
+  const containerRef =
+    useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw =
+        window.localStorage.getItem(
+          STORAGE_KEY
+        );
 
       if (raw) {
         const parsed = JSON.parse(raw);
-        const savedVersion = parsed.version ?? 1;
 
-        if (savedVersion !== STORAGE_VERSION) {
-          // Schema changed since this session was saved — merge safely
-          // over current defaults instead of discarding the user's data.
-          setFormData(mergeWithDefaults(parsed.formData));
+        const savedVersion =
+          parsed.version ?? 1;
+
+        /**
+         * Even when the stored version is old,
+         * merge it against the latest schema.
+         *
+         * This prevents older sessions from crashing
+         * when newly added Step 3 fields are accessed.
+         */
+        if (
+          savedVersion !== STORAGE_VERSION
+        ) {
+          setFormData(
+            mergeWithDefaults(
+              parsed.formData
+            )
+          );
         } else if (parsed.formData) {
-          setFormData(mergeWithDefaults(parsed.formData));
+          setFormData(
+            mergeWithDefaults(
+              parsed.formData
+            )
+          );
         }
 
         if (parsed.currentStep) {
-          setActiveStep(parsed.currentStep);
+          setActiveStep(
+            parsed.currentStep
+          );
 
           setHighestStepVisited(
             Math.max(
@@ -315,15 +423,23 @@ export default function StepWizard() {
         }
       }
     } catch {
-      // Corrupted storage — fall back to clean defaults.
-      setFormData(DEFAULT_WIZARD_DATA);
+      /**
+       * Corrupted localStorage should never
+       * prevent the wizard from rendering.
+       */
+      setFormData(
+        DEFAULT_WIZARD_DATA
+      );
     } finally {
       setHydrated(true);
 
       if (containerRef.current) {
         gsap.fromTo(
           containerRef.current,
-          { opacity: 0, y: 14 },
+          {
+            opacity: 0,
+            y: 14,
+          },
           {
             opacity: 1,
             y: 0,
@@ -358,14 +474,19 @@ export default function StepWizard() {
         return next;
       });
     },
-    [activeStep, highestStepVisited]
+    [
+      activeStep,
+      highestStepVisited,
+    ]
   );
 
   const animateTurn = (
     direction: 1 | -1,
     after: () => void
   ) => {
-    if (!sheetRef.current) return after();
+    if (!sheetRef.current) {
+      return after();
+    }
 
     gsap.to(sheetRef.current, {
       opacity: 0,
@@ -397,32 +518,50 @@ export default function StepWizard() {
     });
   };
 
-  const goToStep = (target: number) => {
-    if (target === activeStep) return;
+  const goToStep = (
+    target: number
+  ) => {
+    if (
+      target === activeStep
+    ) {
+      return;
+    }
 
-    setHighestStepVisited((prev) =>
-      Math.max(prev, target)
+    setHighestStepVisited(
+      (prev) =>
+        Math.max(prev, target)
     );
 
     setErrors({});
 
     animateTurn(
-      target > activeStep ? 1 : -1,
-      () => setActiveStep(target)
+      target > activeStep
+        ? 1
+        : -1,
+      () =>
+        setActiveStep(target)
     );
   };
 
   const handleNext = () => {
-    const stepErrors = validateStep(
-      activeStep,
-      formData
-    );
+    const stepErrors =
+      validateStep(
+        activeStep,
+        formData
+      );
 
-    if (Object.keys(stepErrors).length > 0) {
-      setErrors(stepErrors);
+    if (
+      Object.keys(stepErrors)
+        .length > 0
+    ) {
+      setErrors(
+        stepErrors
+      );
 
       window.scrollTo({
-        top: document.body.scrollHeight,
+        top:
+          document.body
+            .scrollHeight,
         behavior: 'smooth',
       });
 
@@ -432,11 +571,16 @@ export default function StepWizard() {
     setErrors({});
 
     goToStep(
-      Math.min(activeStep + 1, 8)
+      Math.min(
+        activeStep + 1,
+        8
+      )
     );
   };
 
-  if (!hydrated) return null;
+  if (!hydrated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -464,22 +608,31 @@ export default function StepWizard() {
               <div
                 className="h-full bg-[#1E3A8A] transition-all duration-500"
                 style={{
-                  width: `${((activeStep - 1) / 7) * 100}%`,
+                  width: `${
+                    ((activeStep - 1) / 7) *
+                    100
+                  }%`,
                 }}
               />
             </div>
 
             {STEPS.map((step) => {
               const isActive =
-                activeStep === step.num;
+                activeStep ===
+                step.num;
 
               const isPast =
-                step.num < activeStep ||
-                step.num < highestStepVisited;
+                step.num <
+                  activeStep ||
+                step.num <
+                  highestStepVisited;
 
               const hasErrors =
                 Object.keys(
-                  validateStep(step.num, formData)
+                  validateStep(
+                    step.num,
+                    formData
+                  )
                 ).length > 0;
 
               let circleClass =
@@ -497,12 +650,15 @@ export default function StepWizard() {
 
                 textClass =
                   'text-[#0F172A]';
-              } else if (isPast) {
+              } else if (
+                isPast
+              ) {
                 if (hasErrors) {
                   circleClass =
                     'border-red-600 text-red-700 bg-red-50';
 
-                  circleText = '!';
+                  circleText =
+                    '!';
 
                   textClass =
                     'text-red-700';
@@ -510,7 +666,8 @@ export default function StepWizard() {
                   circleClass =
                     'border-emerald-600 text-emerald-700 bg-emerald-50';
 
-                  circleText = '✓';
+                  circleText =
+                    '✓';
 
                   textClass =
                     'text-emerald-700';
@@ -521,7 +678,9 @@ export default function StepWizard() {
                 <button
                   key={step.num}
                   onClick={() =>
-                    goToStep(step.num)
+                    goToStep(
+                      step.num
+                    )
                   }
                   className="flex flex-col items-center relative z-10 cursor-pointer flex-1 outline-none"
                 >
@@ -610,12 +769,15 @@ export default function StepWizard() {
                 update={update}
                 errors={errors}
                 onGenerateDrhp={() =>
-                  alert('Sealed & Submitted!')
+                  alert(
+                    'Sealed & Submitted!'
+                  )
                 }
               />
             )}
 
-            {Object.keys(errors).length > 0 && (
+            {Object.keys(errors).length >
+              0 && (
               <div className="mt-10 p-4 bg-red-50 border-l-4 border-red-700 text-red-900 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
 
@@ -625,21 +787,30 @@ export default function StepWizard() {
                   </span>
 
                   <span className="text-sm font-semibold">
-                    {Object.values(errors)[0]}
+                    {
+                      Object.values(
+                        errors
+                      )[0]
+                    }
                   </span>
                 </div>
               </div>
             )}
 
-            {activeStep < 8 && (
+            {activeStep <
+              8 && (
               <div className="flex justify-end pt-8 mt-12 border-t-2 border-slate-200">
                 <button
-                  onClick={handleNext}
+                  onClick={
+                    handleNext
+                  }
                   className="bg-[#1E3A8A] hover:bg-[#152C69] text-white px-8 py-3 text-xs font-black uppercase flex items-center gap-3"
                 >
                   <span>
-                    Save &amp; Proceed to Section{' '}
-                    {activeStep + 1}
+                    Save &amp; Proceed
+                    to Section{' '}
+                    {activeStep +
+                      1}
                   </span>
 
                   <ChevronRight className="w-4 h-4" />
