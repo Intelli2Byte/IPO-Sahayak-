@@ -238,7 +238,7 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 
-import HighlighterField from '../ui/HighlighterField';
+import HighlighterField from '../UI/HighlighterField';
 
 import {
   WizardFormData,
