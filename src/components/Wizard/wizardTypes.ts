@@ -15,7 +15,15 @@ export interface LogoAsset {
   id: string;
   name: string;
   url: string;
-  type: 'issuer' | 'brlm' | 'registrar' | 'legal' | 'banker' | 'auditor' | 'subbrand' | 'rating';
+  type:
+    | 'issuer'
+    | 'brlm'
+    | 'registrar'
+    | 'legal'
+    | 'banker'
+    | 'auditor'
+    | 'subbrand'
+    | 'rating';
   size: number;
   mimeType: string;
 }
@@ -101,6 +109,13 @@ export interface MarketChannel {
   checked: boolean;
 }
 
+export interface KeyPartner {
+  id: string;
+  name: string;
+  icon: 'company' | 'app';
+  locked: boolean;
+}
+
 export interface FundingAllocation {
   purpose: string;
   amount: number;
@@ -115,7 +130,12 @@ export interface RiskItem {
 
 export interface SellingShareholder {
   name: string;
-  category: 'Promoter' | 'Promoter Group' | 'Public (FPI)' | 'Public (DII)' | 'Public (Other)';
+  category:
+    | 'Promoter'
+    | 'Promoter Group'
+    | 'Public (FPI)'
+    | 'Public (DII)'
+    | 'Public (Other)';
   preIssueShares: number;
   sharesOffered: number;
 }
@@ -142,25 +162,29 @@ export interface UploadedFileMeta {
   uploadedAt: string;
 }
 
-export interface CapitalHistoryRecord {
-  date: string;
-  sharesAllotted: number;
-  faceValue: number;
-  issuePrice: number;
-  considerationType: 'Cash' | 'Bonus' | 'Other' | '';
-  isAiExtracted?: boolean;
+/* =========================================================
+   STEP 7 — LEGAL DOCUMENT UPLOAD METADATA
+   ========================================================= */
+
+/**
+ * Metadata for each legal document upload slot in Step 7.
+ */
+export interface LegalDocumentUpload {
+  id: string;
+  label: string;
+  required: boolean;
+  file: UploadedFileMeta | null;
 }
 
-/* ────────────────────────────────────────────────────────────────
- * NEW — Step 3 Financial Dossier types
- * ──────────────────────────────────────────────────────────────── */
+/* =========================================================
+   STEP 3 — FINANCIAL DOSSIER TYPES
+   ========================================================= */
 
 export interface FinancialDocumentItem {
   id: string;
   label: string;
   required: boolean;
   file: UploadedFileMeta | null;
-  /** Set when the doc was already collected in an earlier step (dedup). */
   reusedFromStep?: number;
 }
 
@@ -172,13 +196,30 @@ export interface IndebtednessRecord {
   isAiExtracted?: boolean;
 }
 
-export interface MdaSectionContent {
+export interface MdaSection {
   content: string;
   aiDrafted: boolean;
   wordCount: number;
 }
 
+export interface CapitalHistoryRecord {
+  date: string;
+  sharesAllotted: number;
+  faceValue: number;
+  issuePrice: number;
+  considerationType: 'Cash' | 'Bonus' | 'Other' | '';
+  isAiExtracted?: boolean;
+}
+
+/* =========================================================
+   MAIN WIZARD FORM DATA
+   ========================================================= */
+
 export interface WizardFormData {
+  /* =======================================================
+     STEP 1 — CORPORATE IDENTITY
+     ======================================================= */
+
   cin: string;
   companyName: string;
   dateOfIncorporation: string;
@@ -219,11 +260,15 @@ export interface WizardFormData {
   registrar: RegistrarDetails;
   legalCounsels: LegalCounsel[];
   bankers: BankerDetails[];
-  auditor: AuditorDetails;
+  auditor: AuditorDetails[];
 
   issuerLogo?: LogoAsset;
   subBrandLogos: LogoAsset[];
   ratingAgencyLogos: LogoAsset[];
+
+  /* =======================================================
+     CAPITAL / OFFER STRUCTURE
+     ======================================================= */
 
   authorisedCapital: number;
   paidUpCapital: number;
@@ -260,6 +305,10 @@ export interface WizardFormData {
   capitalStructureDoc2: UploadedFileMeta | null;
   capitalHistoryRecords: CapitalHistoryRecord[];
 
+  /* =======================================================
+     STEP 2 — BUSINESS OVERVIEW
+     ======================================================= */
+
   coreOperationalPillars: string;
   jointVenturesPartnerships: string;
   competitiveNarrative: string;
@@ -289,6 +338,10 @@ export interface WizardFormData {
   remunerationRationale: string;
   employmentTerms: string;
 
+  /* =======================================================
+     STEP 3 — FINANCIAL DOSSIER
+     ======================================================= */
+
   consolidatedTotalIncome: number;
   netIncomeFromOperations: number;
   profitAfterTax: number;
@@ -306,20 +359,23 @@ export interface WizardFormData {
   netWorth: number;
   totalDebt: number;
 
+  financialDocuments: FinancialDocumentItem[];
+  financialExtractionStatus: 'idle' | 'parsing' | 'done';
+  ebitdaMargin: number;
+  indebtednessRecords: IndebtednessRecord[];
+  mdaSections: Record<string, MdaSection>;
+  mdaActiveTab: string;
+  kpiEditAudit: Record<string, string>;
+
   mdaCommentary: string;
   unusualTransactions: string;
   indebtednessSchedule: string;
 
   attachedDocs: string[];
 
-  // NEW — Financial Dossier (Step 3)
-  financialDocuments: FinancialDocumentItem[];
-  financialExtractionStatus: 'idle' | 'parsing' | 'done';
-  ebitdaMargin: number;
-  kpiEditAudit: Record<string, string>;
-  indebtednessRecords: IndebtednessRecord[];
-  mdaSections: Record<string, MdaSectionContent>;
-  mdaActiveTab: string;
+  /* =======================================================
+     STEP 6 — LEGAL / RISK RELATED
+     ======================================================= */
 
   materialCreditorDues: string;
   pendingLitigationDetails: string;
@@ -367,12 +423,59 @@ export interface WizardFormData {
   complianceCheck2: boolean;
   complianceCheck3: boolean;
 
+  riskExtractionStatus: 'idle' | 'extracting' | 'done';
+  contingentLiabilitiesNotAcknowledged: number;
+  outstandingIndebtednessFundBased: number;
+  materialityThresholdPercent: number;
+  materialityThresholdAmount: number;
+  relatedPartyRiskEntities: string[];
+  cyberTechRiskDescription: string;
+
+  /* =======================================================
+     STEP 7 — LEGAL DISCLOSURES (NEW FIELDS)
+     ======================================================= */
+
+  legalDisclosuresExtractionStatus: 'idle' | 'extracting' | 'done';
+  aggregateTaxDisputesAmount: number;
+  defaultComplianceStatus: string;
+  aiDraftedLitigationNarrative: string;
+
+  /**
+   * Array of legal document upload slots for Step 7.
+   */
+  legalDocuments: LegalDocumentUpload[];
+
+  /* =======================================================
+     STEP 4 — MARKET & MONETIZATION CHANNELS
+     ======================================================= */
+
   marketChannels: MarketChannel[];
   primaryRevenueModel: string;
+  marketChannelsContractDoc: UploadedFileMeta | null;
+  keyPartners: KeyPartner[];
+  aiDraftedNarrative: string;
+  targetGeographies: string[];
+  revenueDependencyTop5: number;
+  customerAcquisitionStrategy: string;
+
+  /* =======================================================
+     STEP 5 — USE OF FUNDS
+     ======================================================= */
 
   fundingAllocations: FundingAllocation[];
   totalIssueSize: number;
+  useOfFundsExtractionStatus: 'idle' | 'extracting' | 'done';
+  useOfFundsNarrative: string;
+  capexDeploymentFy2025: number;
+  capexDeploymentFy2026: number;
+  debtRepaymentBankName: string;
+  debtRepaymentAccountNumber: string;
+  proceedsForPromoters: boolean;
 }
+
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
 
 export const DEFAULT_MARKET_CHANNELS: MarketChannel[] = [
   { label: 'Direct Institutional Sales (B2B/B2G)', checked: false },
@@ -383,47 +486,52 @@ export const DEFAULT_MARKET_CHANNELS: MarketChannel[] = [
   { label: 'Original Equipment Manufacturer (OEM) Supply', checked: false },
 ];
 
-/* NEW — Step 3 constants */
-
 export const MDA_TABS = [
   'Results of Operations',
   'Liquidity',
   'Capital Resources',
   'Off-Balance Sheet Items',
-];
+] as const;
 
 export const DEFAULT_FINANCIAL_DOCUMENTS: FinancialDocumentItem[] = [
   {
-    id: 'audited-financials',
-    label: 'Audited Consolidated Financial Statements',
+    id: 'fin-doc-1',
+    label: 'Restated Consolidated Financial Statements (Audited)',
     required: true,
     file: null,
   },
   {
-    id: 'ceo-cfo-certificate',
-    label: 'CEO–CFO Certificate',
+    id: 'fin-doc-2',
+    label: "Independent Auditor's Report",
     required: true,
     file: null,
   },
   {
-    id: 'auditor-report',
-    label: "Auditor's Report (Annexure)",
-    required: true,
-    file: null,
-  },
-  {
-    id: 'tax-benefits-statement',
-    label: 'Statement of Possible Special Tax Benefits',
+    id: 'fin-doc-3',
+    label: 'Statutory Auditor Peer Review Certificate',
     required: false,
     file: null,
   },
 ];
 
-export const DEFAULT_MDA_SECTIONS: Record<string, MdaSectionContent> =
-  MDA_TABS.reduce((acc, tab) => {
-    acc[tab] = { content: '', aiDrafted: false, wordCount: 0 };
-    return acc;
-  }, {} as Record<string, MdaSectionContent>);
+/* =========================================================
+   STEP 7 — DEFAULT LEGAL DOCUMENTS
+   ========================================================= */
+
+export const DEFAULT_LEGAL_DOCUMENTS: LegalDocumentUpload[] = [
+  {
+    id: 'legal-doc-1',
+    label: 'Secretarial Audit Report',
+    required: true,
+    file: null,
+  },
+  {
+    id: 'legal-doc-2',
+    label: 'Integrated Filing — Governance & Compliance Report',
+    required: true,
+    file: null,
+  },
+];
 
 export const INDIAN_STATES = [
   'Andhra Pradesh',
@@ -464,14 +572,21 @@ export const INDIAN_STATES = [
   'Puducherry',
 ];
 
+export const RELATED_PARTY_OPTIONS = [
+  'Reliance Retail Limited',
+  'Summit Digitel Infrastructure',
+  'Jio Digital Fibre Private Limited',
+  'Reliance Jio Infocomm Limited',
+  'Reliance Industries Limited',
+  'Jio Platforms Limited',
+];
+
 export const DEFAULT_WIZARD_DATA: WizardFormData = {
   cin: '',
   companyName: '',
   dateOfIncorporation: '',
-
   registeredOfficeAddress: '',
   objectClause: '',
-
   addressBuilding: '',
   addressStreet: '',
   addressLocality: '',
@@ -479,16 +594,12 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
   addressDistrict: '',
   addressState: 'Maharashtra',
   addressPinCode: '',
-
   corporateOfficeDifferent: false,
   corporateOfficeAddress: '',
-
   telephone: '',
   officialEmail: '',
   websiteUrl: '',
-
   promoterCount: 1,
-
   promoters: [
     {
       name: '',
@@ -503,18 +614,14 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
       address: '',
     },
   ],
-
   csName: '',
   csIcsiNumber: '',
   csEmail: '',
   csPhone: '',
-
   complianceOfficerName: '',
   complianceOfficerEmail: '',
   complianceOfficerPhone: '',
-
   aoaRestrictiveClauses: '',
-
   brlms: [
     {
       id: 'brlm-1',
@@ -528,7 +635,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
       website: '',
     },
   ],
-
   registrar: {
     entityName: '',
     sebiRegistrationNo: '',
@@ -539,7 +645,6 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
     address: '',
     phone: '',
   },
-
   legalCounsels: [
     {
       id: 'legal-1',
@@ -558,9 +663,7 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
       email: '',
     },
   ],
-
   bankers: [],
-
   auditor: {
     firmName: '',
     frn: '',
@@ -569,31 +672,24 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
     phone: '',
     email: '',
   },
-
   issuerLogo: undefined,
   subBrandLogos: [],
   ratingAgencyLogos: [],
-
   authorisedCapital: 0,
   paidUpCapital: 0,
   promoterShareholdingPercentage: 0,
   fiiShareholdingPercentage: 0,
-
   offerStructure: '',
   proposedShares: 0,
   faceValuePerShare: 0,
   capPrice: 0,
   issueSize: 0,
-
   preIssueTotalShares: 0,
   preIssuePromoterShares: 0,
-
   sellingShareholders: [],
-
   objectsOfOffer: '',
   objectsOfOfferCategories: [],
   objectsOfOfferAmounts: {},
-
   esopDetails: {
     poolSize: 0,
     vestingSchedule: '',
@@ -602,26 +698,19 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
     totalOptionsGranted: 0,
     hasConvertibles: '',
   },
-
   egmAgmDate: '',
   maxAuthorizedIssueLimit: 0,
   ipoAuthorizationDoc: null,
-
   capitalStructureDoc1: null,
   capitalStructureDoc2: null,
   capitalHistoryRecords: [],
-
   coreOperationalPillars: '',
   jointVenturesPartnerships: '',
-
   competitiveNarrative: '',
   proprietaryTechnology: '',
-
   materialContracts: [],
-
   businessModel: '',
   usp: '',
-
   products: [
     {
       name: '',
@@ -630,79 +719,58 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
       category: 'Financial Services',
     },
   ],
-
   sectorsServed: [],
   sectorBreakdowns: {},
-
   capacityValue: 0,
   capacityUnit: 'Customers / month',
   capacityUtilization: 0,
-
   boardOfDirectors: '',
   remunerationDetails: '',
   boardCommittees: '',
-
   executiveAttrition: '',
   executiveAttritionExplanation: '',
-
   remunerationRationale: '',
   employmentTerms: '',
-
   consolidatedTotalIncome: 0,
   netIncomeFromOperations: 0,
   profitAfterTax: 0,
   assetsUnderManagement: 0,
-
   fy24Revenue: 0,
   fy25Revenue: 0,
   fy26Revenue: 0,
-
   fy24Pat: 0,
   fy25Pat: 0,
   fy26Pat: 0,
-
   totalAssets: 0,
   netWorth: 0,
   totalDebt: 0,
-
-  mdaCommentary: '',
-  unusualTransactions: '',
-  indebtednessSchedule: '',
-
-  attachedDocs: [],
-
-  // NEW — Financial Dossier (Step 3) defaults
   financialDocuments: DEFAULT_FINANCIAL_DOCUMENTS,
   financialExtractionStatus: 'idle',
   ebitdaMargin: 0,
-  kpiEditAudit: {},
   indebtednessRecords: [],
-  mdaSections: DEFAULT_MDA_SECTIONS,
+  mdaSections: {},
   mdaActiveTab: MDA_TABS[0],
-
+  kpiEditAudit: {},
+  mdaCommentary: '',
+  unusualTransactions: '',
+  indebtednessSchedule: '',
+  attachedDocs: [],
   materialCreditorDues: '',
   pendingLitigationDetails: '',
   materialityAssessment: '',
-
   regulatoryApprovalsConfirmed: false,
-
   litigationsCount: 0,
   taxDisputesCount: 0,
-
   hasPendingLitigation: '',
   hasRegulatoryAction: '',
   hasDefaultHistory: '',
-
   liquidityRiskManagement: '',
   fundingConcentration: '',
-
   clientSupplierRisk: '',
   regulatoryComplianceRisk: '',
   interestRateCreditRisk: '',
   operationalDependencyRisk: '',
-
   riskMitigationStrategies: '',
-
   risks: [
     {
       title: 'Client / Supplier Concentration Risk',
@@ -725,55 +793,54 @@ export const DEFAULT_WIZARD_DATA: WizardFormData = {
       category: 'Operational',
     },
   ],
-
   hasOtherRisks: false,
   otherRisksDescription: '',
-
   secretarialAuditDeclarations: '',
   ceoCfoCertifications: '',
-
   intermediaryConsent: false,
-
   signatoryName: '',
   signatoryDesignation: '',
   signatoryDin: '',
-
   declarationAccepted: false,
   signatureVerified: false,
-
   esignTriggered: false,
-
   complianceCheck1: false,
   complianceCheck2: false,
   complianceCheck3: false,
-
+  riskExtractionStatus: 'idle',
+  contingentLiabilitiesNotAcknowledged: 0,
+  outstandingIndebtednessFundBased: 0,
+  materialityThresholdPercent: 1,
+  materialityThresholdAmount: 0,
+  relatedPartyRiskEntities: [],
+  cyberTechRiskDescription: '',
+  legalDisclosuresExtractionStatus: 'idle',
+  aggregateTaxDisputesAmount: 0,
+  defaultComplianceStatus: '',
+  aiDraftedLitigationNarrative: '',
+  legalDocuments: DEFAULT_LEGAL_DOCUMENTS,
   marketChannels: DEFAULT_MARKET_CHANNELS,
   primaryRevenueModel: '',
-
+  marketChannelsContractDoc: null,
+  keyPartners: [],
+  aiDraftedNarrative: '',
+  targetGeographies: [],
+  revenueDependencyTop5: 0,
+  customerAcquisitionStrategy: '',
   fundingAllocations: [
-    {
-      purpose: 'Capital Expenditure',
-      amount: 8000000,
-      percentage: 40,
-    },
-    {
-      purpose: 'Working Capital Requirements',
-      amount: 6000000,
-      percentage: 30,
-    },
-    {
-      purpose: 'Debt Repayment',
-      amount: 4000000,
-      percentage: 20,
-    },
-    {
-      purpose: 'General Corporate Purposes',
-      amount: 2000000,
-      percentage: 10,
-    },
+    { purpose: 'Capital Expenditure', amount: 8000000, percentage: 40 },
+    { purpose: 'Working Capital Requirements', amount: 6000000, percentage: 30 },
+    { purpose: 'Debt Repayment', amount: 4000000, percentage: 20 },
+    { purpose: 'General Corporate Purposes', amount: 2000000, percentage: 10 },
   ],
-
   totalIssueSize: 20000000,
+  useOfFundsExtractionStatus: 'idle',
+  useOfFundsNarrative: '',
+  capexDeploymentFy2025: 0,
+  capexDeploymentFy2026: 0,
+  debtRepaymentBankName: '',
+  debtRepaymentAccountNumber: '',
+  proceedsForPromoters: false,
 };
 
 export const PAPER_INPUT =
