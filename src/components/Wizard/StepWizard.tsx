@@ -349,7 +349,11 @@ function validateStep(
   return errors;
 }
 
-export default function StepWizard() {
+interface StepWizardProps {
+  onNavigateToGenerated?: () => void;
+}
+
+export default function StepWizard({ onNavigateToGenerated }: StepWizardProps = {}) {
   const [activeStep, setActiveStep] =
     useState<number>(1);
 
@@ -767,12 +771,7 @@ export default function StepWizard() {
               <PanelEight_FinalReview
                 data={formData}
                 update={update}
-                errors={errors}
-                onGenerateDrhp={() =>
-                  alert(
-                    'Sealed & Submitted!'
-                  )
-                }
+                onNavigateToGenerated={onNavigateToGenerated}
               />
             )}
 
