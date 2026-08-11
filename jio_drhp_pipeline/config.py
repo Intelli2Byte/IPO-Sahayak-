@@ -80,14 +80,21 @@ for d in [
 # LLAMAPARSE TIER ROUTING
 # ============================================================
 
+# TIER_MAP = {
+#     "financial_statements": "agentic",
+#     "financial_notes": "agentic",
+#     "capital_shareholding": "agentic",
+#     "governance_audit": "agentic",       # was "balanced" — invalid, fixed to a real tier
+#     "corporate_legal": "cost_effective",
+# }
+
 TIER_MAP = {
     "financial_statements": "agentic",
     "financial_notes": "agentic",
     "capital_shareholding": "agentic",
-    "governance_audit": "balanced",
+    "governance_audit": "agentic",       # was "balanced" — invalid, now fixed
     "corporate_legal": "cost_effective",
 }
-
 
 # ============================================================
 # FIREWORKS MODELS

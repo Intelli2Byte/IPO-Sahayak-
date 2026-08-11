@@ -29,29 +29,67 @@
 
 ---
 
-## 💡 The Problem & The Solution
-
-Preparing a Draft Red Herring Prospectus (DRHP) under SEBI ICDR Regulations is a manual, expensive bottleneck for SMEs:
-* **Cost:** Preparing a DRHP costs **₹15–25 Lakhs** in advisory fees.
-* **Timeline:** Takes **4–6 months** of continuous compliance auditing.
-* **Volume:** Advisory barriers restrict listings to only **150–200 companies annually** across India.
-
-**IPO Sahayak** solves this bottleneck through an automated, plain-language wizard and AI document engine:
-* **Auto-Population & Extraction:** Integrates directly with MCA21, GSTN, and Account Aggregator APIs while using LlamaParse & PyMuPDF to auto-fill **70%** of company and financial data.
-* **Exhaustive Generation:** Instantly compiles 200+ page **Draft Red Herring Prospectus (DRHP)** documents alongside a 10-page **Abridged Prospectus** using DeepSeek-V4-Flash and DeepSeek-V4-Pro models.
-* **Impact:** Cuts document preparation costs by **60–70%** (down to ₹5–8 Lakhs) and slashes timelines by **70%** (down to 4–6 weeks).
+## 📍 Table of Contents
+- [💡 The Problem & The Solution](#-the-problem--the-solution)
+- [✨ Core Features Breakdown](#-core-features-breakdown)
+- [🛠️ Technology Stack](#️-technology-stack)
+- [🏗️ System Architecture & Visual Pipeline](#️-system-architecture--visual-pipeline)
+  - [Step 1: Frontend User Journey & Wizard Onboarding](#step-1-frontend-user-journey--wizard-onboarding)
+  - [Step 2: End-to-End System Architecture Overview](#step-2-end-to-end-system-architecture-overview)
+  - [Step 3: Backend AI Document Processing & Retrieval Pipeline](#step-3-backend-ai-document-processing--retrieval-pipeline)
+  - [Step 4: DRHP Synthesis, Section Compilation & Collaboration](#step-4-drhp-synthesis-section-compilation--collaboration)
+  - [Step 5: Master Pipeline Overview](#step-5-master-pipeline-overview)
+- [📂 Detailed Project Structure](#-detailed-project-structure)
+- [🚀 Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Environment Variables Setup](#-environment-variables-setup)
+  - [Installation & Local Setup](#-installation--quickstart)
+- [🤝 Contributing to IPO Sahayak](#-contributing-to-ipo-sahayak)
+- [📄 License & Attribution](#-license--attribution)
 
 ---
 
-## ✨ Key Features
+## 💡 The Problem & The Solution
 
-* **Intelligent Document Generation:** Leverages **DeepSeek-V4-Flash** and **DeepSeek-V4-Pro** to convert plain-language disclosures into SEBI-compliant legal text and dynamic DRHP section layouts.
-* **Advanced Document Parsing & OCR:** Uses **LlamaParse**, **PyMuPDF**, and **pdfplumber** to extract text, tables, and financial metrics (Revenue, PAT, EBITDA, Net Worth) from uploaded financial dossiers.
-* **Hybrid Search Retrieval:** Combines BM25 lexical search and kNN vector search (via `all-MiniLM-L6-v2`) with Reciprocal Rank Fusion (RRF) and metadata filtering in **Elasticsearch** for RAG-based clause lookup.
-* **Interactive PDF Review & Annotation:** In-browser PDF rendering with interactive highlighting, split-panel source viewer, and annotation layers using **react-pdf** and **PDF.js**.
-* **Asynchronous Processing:** Offloads heavy PDF compilation (WeasyPrint, ReportLab, LaTeX engine) and batch AI generation tasks to **Celery** workers backed by **Redis**.
-* **Automated Notifications & Handoff:** Transactional emails, CA/Banker invitation workflows, and digital signature review alerts powered by **Brevo**.
-* **Automated Compliance Engine:** Performs real-time validation checks against SEBI ICDR Regulations (2018) to verify financial eligibility ratios and flag missing statutory disclosures.
+Preparing a Draft Red Herring Prospectus (DRHP) under SEBI ICDR Regulations is a manual, expensive bottleneck for India's 500,000+ IPO-eligible Small & Medium Enterprises (SMEs):
+* 💸 **Cost Barrier:** Preparing a DRHP costs **₹15–25 Lakhs** in advisory and legal fees.
+* ⏳ **Time Bottleneck:** Takes **4–6 months** of continuous manual audit, drafting, and cross-verification.
+* 📈 **Capacity Limit:** High fees and advisory complexity restrict listings to only **150–200 companies annually** across India.
+
+**IPO Sahayak** solves this bottleneck through an automated, plain-language wizard and intelligent AI document engine:
+* 🤖 **Auto-Population & Extraction:** Integrates directly with MCA21, GSTN, and Account Aggregator APIs while using **LlamaParse** & **PyMuPDF** to auto-fill **70%** of necessary company data.
+* 📑 **Exhaustive Generation:** Instantly compiles 200+ page **Draft Red Herring Prospectus (DRHP)** documents alongside a 10-page **Abridged Prospectus** using DeepSeek-V4-Flash and DeepSeek-V4-Pro models.
+* ⚡ **Drastic Impact:** Cuts document preparation costs by **60–70%** (down to ₹5–8 Lakhs) and slashes timelines by **70%** (down to 4–6 weeks).
+
+---
+
+## ✨ Core Features Breakdown
+
+### 🤖 1. AI-Powered DRHP Content & Layout Engine (DeepSeek-V4)
+* **DeepSeek-V4-Flash:** Rapidly translates raw business descriptions, promoter profiles, and financial notes into formal legal clauses aligned with SEBI ICDR Schedule VI guidelines.
+* **DeepSeek-V4-Pro:** Dynamically designs visual PDF layouts, statutory header hierarchies, and complex tabular structures for financial statements.
+* **5-Section AI Classifier:** Automatically tags and categorizes input disclosures into Corporate Identity, Business Overview, Financial Dossiers, Risk Factors, and Legal Litigations.
+
+### 🔍 2. Hybrid RAG Retrieval Engine (BM25 + FAISS kNN + RRF)
+* **BM25 Lexical Keyword Retrieval:** Matches exact statutory terms, act references, and regulatory sections from SEBI ICDR guidelines.
+* **FAISS kNN Semantic Retrieval:** Uses `all-MiniLM-L6-v2` dense vector embeddings to perform semantic similarity searches over past DRHP disclosures.
+* **Reciprocal Rank Fusion (RRF):** Fuses lexical and semantic search ranks to extract the top-k most relevant legal contexts into the AI prompt window.
+
+### 📄 3. Document Intelligence & OCR Extraction (LlamaParse & PyMuPDF)
+* **Multi-Format Ingestion:** Extracts text and structured tables from scanned PDFs, balance sheets, CA certificates, and Memorandums of Association (MoA).
+* **Financial Table Parsing:** Extracts key financial metrics—including Revenue from Operations, EBITDA, Restated PAT, and Net Worth—and formats them into normalized JSON schemas.
+
+### 📊 4. SEBI ICDR 2018 Automated Compliance Engine
+* **Rule Check Automation:** Runs real-time validation checks against SEBI eligibility norms (e.g., minimum net worth, 3-year profitability criteria, promoter dilution limits).
+* **Discrepancy Alerts:** Highlights missing statutory disclosures, unverified promoter PAN entries, or unhedged risk factors before document finalization.
+
+### 🛡️ 5. ISO 27001 Document Vault & Interactive PDF Review
+* **Dual-Panel Split Viewer:** Side-by-side view comparing source documents (scanned ITRs/audits) with generated DRHP pages.
+* **In-Browser Annotation (`react-pdf` + `PDF.js`):** Allows Merchant Bankers, Chartered Accountants, and Legal Counsel to highlight text, leave threaded review comments, and affix digital signatures.
+
+### ⚡ 6. Asynchronous Processing & Brevo Dispatch
+* **Celery + Redis Queues:** Offloads PDF compilation, WeasyPrint/ReportLab layout rendering, and batch AI queries to background workers.
+* **Brevo Email Service:** Triggers transactional emails, security verification codes, team invitation links, and review handoff notifications.
 
 ---
 
@@ -61,9 +99,9 @@ Preparing a Draft Red Herring Prospectus (DRHP) under SEBI ICDR Regulations is a
 | :--- | :--- |
 | **Frontend** | Next.js 15, React 18, TypeScript, Tailwind CSS, react-pdf, PDF.js, Zustand / Context API |
 | **Backend API** | Python 3.10+, FastAPI, Pydantic, REST API, Uvicorn |
-| **Database & Caching** | PostgreSQL (Relational Data), Redis (Cache & Celery Broker) |
+| **Database & Caching** | PostgreSQL (Relational Data), SQLite3 (Metadata), Redis (Cache & Celery Broker) |
 | **Task Queue & Async** | Celery (Background Worker Queue) |
-| **Search & Retrieval Engine**| Elasticsearch 8+ (Hybrid BM25 + kNN Search, RRF Fusion, Chunk Storage) |
+| **Search & Retrieval Engine**| Elasticsearch 8+, FAISS Vector Index (BM25 + kNN Hybrid Search, RRF Fusion) |
 | **AI & Machine Learning** | DeepSeek-V4-Flash, DeepSeek-V4-Pro, LlamaParse, `all-MiniLM-L6-v2` Embeddings |
 | **PDF Extraction & Parsing** | PyMuPDF (fitz), pdfplumber, LlamaParse |
 | **PDF Compilation & Layout** | WeasyPrint, ReportLab, PyPDF2, pikepdf, LaTeX Compiler |
@@ -72,40 +110,54 @@ Preparing a Draft Red Herring Prospectus (DRHP) under SEBI ICDR Regulations is a
 
 ---
 
-## 🏗️ System Architecture & Workflow
+## 🏗️ System Architecture & Visual Pipeline
 
-```text
-[User Onboarding / Form Wizard] 
-       │
-       ├──► MCA21 / GSTN Auto-Fetch API ──► Auto-fills 70% Company Profile
-       ├──► Document Ingestion ──────────► LlamaParse & PyMuPDF (Text & Table Extraction)
-       │                                     │
-       │                                     ▼
-       │                               Embedding Engine (`all-MiniLM-L6-v2`)
-       │                                     │
-       │                                     ▼
-       │                               Elasticsearch Index (BM25 + kNN Hybrid Search)
-       │
-       ├──► Plain Disclosures Input ────► DeepSeek-V4-Pro AI Generation Engine
-       │                                     │
-       │                                     ▼
-       │                               Celery Task Queue (Redis Broker)
-       │                                     │
-       │                                     ▼
-       │                               PDF Layout & LaTeX/WeasyPrint Compilation
-       │                                     │
-       │                                     ▼
-       ├──► Brevo Notification Service ──► Email Merchant Bankers, CAs & Promoters
-       │
-       └──► Interactive PDF Review Vault ► Split Viewer (react-pdf + PDF.js Highlighting)
-```
+### Step 1: Frontend User Journey & Wizard Onboarding
+The entry flow for Merchant Bankers and SME Promoters. Users upload initial corporate documents (MoA, CA certificates, ITRs) into an 8-panel wizard form. The backend automatically parses inputs into structured JSON and populates AI suggested values.
 
-### Detailed Pipeline Workflow:
-1. **Ingestion & Parsing:** Documents uploaded via the 8-Panel Wizard are parsed using LlamaParse and PyMuPDF. Text and tables are chunked, embedded using `all-MiniLM-L6-v2`, and indexed into Elasticsearch.
-2. **Hybrid Retrieval (RAG):** Compliance queries and clause generation trigger a hybrid search in Elasticsearch, fusing lexical (BM25) and semantic (kNN) results using Reciprocal Rank Fusion (RRF).
-3. **AI Generation:** FastAPI sends the context-rich prompt and metadata to DeepSeek-V4 models to format formal SEBI disclosures.
-4. **Async Compilation:** Heavy PDF layout rendering (WeasyPrint, ReportLab, PyPDF2) runs asynchronously via Celery workers backed by Redis.
-5. **Review & Handoff:** The Next.js frontend renders live PDF previews using `react-pdf` and `PDF.js` with inline text highlighting. Brevo triggers automated transactional email alerts for team collaborators.
+<p align="center">
+  <img src="public/images/architecture/01_frontend_user_journey.png" alt="Step 1: Frontend User Journey & Wizard Flow" width="100%" />
+</p>
+
+---
+
+### Step 2: End-to-End System Architecture Overview
+High-level system topology showing interaction between the Next.js Frontend, FastAPI Backend, LlamaParse parsing, Elasticsearch / FAISS hybrid search, DeepSeek-V4 AI models, Document Vault, and Brevo Email service.
+
+<p align="center">
+  <img src="public/images/architecture/02_system_architecture_overview.png" alt="Step 2: End-to-End System Architecture Overview" width="90%" />
+</p>
+
+---
+
+### Step 3: Backend AI Document Processing & Retrieval Pipeline
+Deep dive into document ingestion, semantic chunking, metadata extraction, dual storage (SQLite3 + FAISS), hybrid BM25 + kNN vector search, Reciprocal Rank Fusion (RRF), and DeepSeek-V4 section classification.
+
+<p align="center">
+  <img src="public/images/architecture/03_backend_ai_processing_pipeline.png" alt="Step 3: Backend AI Document Processing & Hybrid Retrieval Pipeline" width="100%" />
+</p>
+
+---
+
+### Step 4: DRHP Synthesis, Section Compilation & Collaboration
+The compilation lifecycle where classified section JSONs are validated, compiled by the Layout Engine, scored against SEBI compliance rules, rendered into final DRHP PDFs, and deployed to the ISO 27001 Document Vault for review and Brevo email sharing.
+
+<p align="center">
+  <img src="public/images/architecture/04_drhp_generation_collaboration.png" alt="Step 4: DRHP Generation & Collaboration Pipeline" width="90%" />
+</p>
+
+---
+
+### Step 5: Master Pipeline Overview
+Full end-to-end master workflow diagram visualizing the entire ecosystem from document upload to final legal review.
+
+<details>
+<summary><b>🔍 Click to view Master Pipeline Architecture Diagram</b></summary>
+<br/>
+<p align="center">
+  <img src="public/images/architecture/05_master_pipeline_overview.png" alt="Step 5: Master Pipeline Overview" width="100%" />
+</p>
+</details>
 
 ---
 
@@ -365,6 +417,57 @@ celery -A services.tasks worker --loglevel=info
 # Build frontend bundle
 npm run build
 ```
+
+---
+
+## 🤝 Contributing to IPO Sahayak
+
+We welcome contributions from developers, AI engineers, legal compliance experts, and open-source enthusiasts! Follow these simple step-by-step guidelines to get started:
+
+### Step 1: Fork & Clone the Repository
+Fork the repository on GitHub and clone your fork locally:
+```bash
+git clone https://github.com/YOUR_USERNAME/IPO-Sahayak-.git
+cd IPO-Sahayak-
+```
+
+### Step 2: Create a Feature Branch
+Create a descriptive branch for the feature or bugfix you are working on:
+```bash
+git checkout -b feature/amazing-new-feature
+```
+
+### Step 3: Set Up Local Development Environment
+Install frontend dependencies and set up the Python backend virtual environment:
+```bash
+# Setup Frontend
+npm install
+
+# Setup Backend Virtual Environment
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Step 4: Commit Your Changes
+Make sure your changes adhere to project code style standards:
+```bash
+git add .
+git commit -m "feat(ai): integrate DeepSeek-V4 section validation rules"
+```
+
+### Step 5: Push to Your Fork & Open a Pull Request
+Push your feature branch to your GitHub repository and submit a Pull Request:
+```bash
+git push origin feature/amazing-new-feature
+```
+
+### 📋 Code Review Guidelines:
+* Ensure all TypeScript files pass linting (`npm run lint`).
+* Ensure Python scripts conform to PEP8 standards.
+* Include concise commit messages explaining the rationale behind your changes.
+* Tag related issue numbers in your Pull Request description.
 
 ---
 

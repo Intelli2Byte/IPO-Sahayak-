@@ -23,9 +23,11 @@ export default function GeneratedDocuments() {
     }
   };
 
+  const hasRealFile = Boolean(viewingDoc?.url);
+
   return (
     <div className="space-y-8 pb-12 select-none animate-fade-in">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between border-b-2 border-slate-800 pb-5">
         <div>
@@ -39,7 +41,7 @@ export default function GeneratedDocuments() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
         {documents.map((doc) => (
           <div key={doc.id} className="bg-white border border-slate-300 shadow-sm flex flex-col group transition-all hover:shadow-md hover:border-slate-400">
-            
+
             {/* Card Body */}
             <div className="p-6 flex-1 relative">
               {/* Version & Status Badges */}
@@ -74,28 +76,38 @@ export default function GeneratedDocuments() {
 
             {/* Action Toolbar */}
             <div className="bg-[#2A3441] flex divide-x divide-slate-600 border-t border-[#2A3441] mt-auto rounded-b-sm">
-              <button 
+              <button
                 onClick={() => openViewer(doc)}
                 className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
               >
                 <Eye className="w-3.5 h-3.5" /> View
               </button>
-              <button 
+              <button
                 className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-amber-400 hover:bg-slate-700 transition-colors"
               >
                 <Edit2 className="w-3.5 h-3.5 text-amber-500" /> Edit
               </button>
-              <button 
+              <button
                 onClick={() => deleteDoc(doc.id)}
                 className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-red-400 hover:bg-slate-700 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete
               </button>
-              <button 
-                className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-              >
-                <Scan className="w-3.5 h-3.5" /> Scanner
-              </button>
+              {doc.url ? (
+                <a
+                  href={doc.url}
+                  download
+                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download
+                </a>
+              ) : (
+                <button
+                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  <Scan className="w-3.5 h-3.5" /> Scanner
+                </button>
+              )}
             </div>
 
           </div>
@@ -108,7 +120,7 @@ export default function GeneratedDocuments() {
       {viewingDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 md:p-8 animate-fade-in">
           <div className="bg-slate-100 w-full max-w-6xl h-full flex flex-col shadow-2xl border border-slate-700 overflow-hidden relative">
-            
+
             {/* Viewer Toolbar */}
             <div className="h-14 bg-[#0F172A] border-b border-slate-700 flex items-center justify-between px-4 shrink-0 shadow-md z-10">
               <div className="flex items-center gap-4">
@@ -122,12 +134,22 @@ export default function GeneratedDocuments() {
               </div>
 
               <div className="flex items-center gap-3">
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-[10px] font-black text-white uppercase tracking-wider transition-colors">
-                  <Download className="w-3 h-3" /> Download
-                </button>
+                {viewingDoc.url ? (
+                  <a
+                    href={viewingDoc.url}
+                    download
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-[10px] font-black text-white uppercase tracking-wider transition-colors"
+                  >
+                    <Download className="w-3 h-3" /> Download
+                  </a>
+                ) : (
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-[10px] font-black text-white uppercase tracking-wider transition-colors">
+                    <Download className="w-3 h-3" /> Download
+                  </button>
+                )}
                 <div className="w-px h-6 bg-slate-700 mx-1" />
-                <button 
-                  onClick={closeViewer} 
+                <button
+                  onClick={closeViewer}
                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -135,41 +157,53 @@ export default function GeneratedDocuments() {
               </div>
             </div>
 
-            {/* Viewer Canvas (Mocked secure reader) */}
-            <div className="flex-1 bg-[#F1F5F9] overflow-y-auto flex justify-center p-8 relative">
-              {/* Secure Watermark */}
-              <div className="fixed inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] z-0">
-                <span className="text-8xl font-black text-slate-900 -rotate-45 select-none">STRICTLY CONFIDENTIAL</span>
+            {/* Viewer Canvas */}
+            {hasRealFile ? (
+              /* REAL PDF PREVIEW */
+              <div className="flex-1 bg-[#525659] relative">
+                <iframe
+                  src={viewingDoc.url}
+                  title={viewingDoc.name}
+                  className="w-full h-full border-0"
+                />
               </div>
-
-              {/* The "Paper" Document */}
-              <div className="bg-white w-full max-w-4xl shadow-xl border border-slate-300 p-12 md:p-20 relative z-10 min-h-[1056px]">
-                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-10">
-                  <div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-                      {viewingDoc.name.includes('Abridged') ? 'Abridged Prospectus' : 'Draft Red Herring Prospectus'}
-                    </h1>
-                    <p className="text-sm font-bold text-slate-500 mt-2">Prepared in accordance with SEBI (ICDR) Regulations.</p>
-                  </div>
-                  <ShieldCheck className="w-12 h-12 text-[#1E3A8A] opacity-20" />
+            ) : (
+              /* MOCKED SECURE READER (used for .docx / documents without a real file) */
+              <div className="flex-1 bg-[#F1F5F9] overflow-y-auto flex justify-center p-8 relative">
+                {/* Secure Watermark */}
+                <div className="fixed inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] z-0">
+                  <span className="text-8xl font-black text-slate-900 -rotate-45 select-none">STRICTLY CONFIDENTIAL</span>
                 </div>
 
-                <div className="space-y-6 text-slate-700 text-sm font-medium leading-relaxed">
-                  <div className="p-4 bg-slate-50 border border-slate-200 text-xs font-bold font-mono text-slate-500">
-                    [SECURE DOCUMENT RENDERER] <br/>
-                    File: {viewingDoc.name} <br/>
-                    Encryption: AES-256 Active
+                {/* The "Paper" Document */}
+                <div className="bg-white w-full max-w-4xl shadow-xl border border-slate-300 p-12 md:p-20 relative z-10 min-h-[1056px]">
+                  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-10">
+                    <div>
+                      <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
+                        {viewingDoc.name.includes('Abridged') ? 'Abridged Prospectus' : 'Draft Red Herring Prospectus'}
+                      </h1>
+                      <p className="text-sm font-bold text-slate-500 mt-2">Prepared in accordance with SEBI (ICDR) Regulations.</p>
+                    </div>
+                    <ShieldCheck className="w-12 h-12 text-[#1E3A8A] opacity-20" />
                   </div>
-                  <p>
-                    Please read Section 32 of the Companies Act, 2013. This is a secure mock viewer illustrating how the officially generated {viewingDoc.name.includes('Abridged') ? 'Abridged Prospectus' : 'DRHP'} will render in the portal prior to submission to the lead manager and exchange.
-                  </p>
-                  {/* Mock paragraphs to show scrolling */}
-                  {Array.from({ length: 15 }).map((_, i) => (
-                    <div key={i} className="h-4 bg-slate-100 rounded w-full animate-pulse" style={{ width: `${Math.max(40, Math.random() * 100)}%` }} />
-                  ))}
+
+                  <div className="space-y-6 text-slate-700 text-sm font-medium leading-relaxed">
+                    <div className="p-4 bg-slate-50 border border-slate-200 text-xs font-bold font-mono text-slate-500">
+                      [SECURE DOCUMENT RENDERER] <br/>
+                      File: {viewingDoc.name} <br/>
+                      Encryption: AES-256 Active
+                    </div>
+                    <p>
+                      Please read Section 32 of the Companies Act, 2013. This is a secure mock viewer illustrating how the officially generated {viewingDoc.name.includes('Abridged') ? 'Abridged Prospectus' : 'DRHP'} will render in the portal prior to submission to the lead manager and exchange.
+                    </p>
+                    {/* Mock paragraphs to show scrolling */}
+                    {Array.from({ length: 15 }).map((_, i) => (
+                      <div key={i} className="h-4 bg-slate-100 rounded w-full animate-pulse" style={{ width: `${Math.max(40, Math.random() * 100)}%` }} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
           </div>
         </div>

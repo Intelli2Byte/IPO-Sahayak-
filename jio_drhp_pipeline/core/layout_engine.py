@@ -37,26 +37,39 @@ def build_layout_template(reference_markdowns: list[str]) -> dict:
 
     merged = analyses[0]  # structure baseline
     # Average numeric leaf values across analyses for stability
-    def merge_dicts(dicts):
-        keys = dicts[0].keys()
-        out = {}
-        for k in keys:
-            vals = [d.get(k) for d in dicts if k in d]
-            if isinstance(vals[0], dict):
-                out[k] = merge_dicts(vals)
-            elif isinstance(vals[0], (int, float)):
-                out[k] = _merge_numeric(vals, vals[0])
-            else:
-                out[k] = vals[0]  # take first for strings/enums
-        return out
-
-    merged = merge_dicts(analyses)
-    cache_path = config.OUTPUT_REPORTS_DIR / "layout_template.json"
-    cache_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
-    return merged
+    
 
 def load_or_build_layout_template(reference_markdowns: list[str]) -> dict:
     cache_path = config.OUTPUT_REPORTS_DIR / "layout_template.json"
     if cache_path.exists():
         return json.loads(cache_path.read_text(encoding="utf-8"))
     return build_layout_template(reference_markdowns)
+def merge_dicts(dicts):
+    """Merge a list of dicts key-by-key. Defensive against LLM output
+    where the same key may come back as different types across samples
+    (e.g. a nested dict in one analysis, a plain string in another)."""
+    # Only dicts can be merged this way; if something upstream passed a
+    # non-dict, just return it as-is (shouldn't normally happen at the
+    # top level, but guards against bad recursion).
+    dicts = [d for d in dicts if isinstance(d, dict)]
+    if not dicts:
+        return {}
+
+    keys = dicts[0].keys()
+    out = {}
+    for k in keys:
+        vals = [d.get(k) for d in dicts if k in d]
+        vals = [v for v in vals if v is not None]
+        if not vals:
+            continue
+
+        # Only recurse if ALL values for this key are dicts.
+        if all(isinstance(v, dict) for v in vals):
+            out[k] = merge_dicts(vals)
+        # Only average if ALL values are numeric.
+        elif all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
+            out[k] = _merge_numeric(vals, vals[0])
+        # Mixed types or strings/lists/bools: take the first non-null value.
+        else:
+            out[k] = vals[0]
+    return out
