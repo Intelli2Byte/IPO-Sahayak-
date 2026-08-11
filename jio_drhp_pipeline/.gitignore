@@ -1,0 +1,8 @@
+.env
+workspace/02_extracted_text/
+workspace/03_vector_db/
+workspace/04_output_reports/
+workspace/05_logs/
+__pycache__/
+*.pyc
+venv/
