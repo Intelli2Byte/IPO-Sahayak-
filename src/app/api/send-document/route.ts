@@ -11,6 +11,8 @@ interface SendDocumentResponse {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_ROLES = ['Editor', 'CFO', 'Auditor', 'Company Secretary'];
 
+const FASTAPI_BASE_URL = process.env.FASTAPI_BASE_URL ?? 'http://127.0.0.1:8000';
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { recipientEmail, role, documentId } = body ?? {};
@@ -36,15 +38,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Server-side re-verification: the documentId must belong to the
-  // Generated Documents source (never the repository/vault documents),
-  // and must be in a sendable ('Final') state. Never trust the frontend.
-  //
-  // NOTE (prototype limitation): GENERATED_DOCS here is the static base
-  // list, since this app has no backend persistence layer for generated
-  // documents yet. Documents added/removed at runtime only live in the
-  // client-side GeneratedDocumentsContext. Once generated documents are
-  // persisted server-side, swap this import for a real data-access call.
+  // Server-side re-verification: documentId must belong to the Generated
+  // Documents source and be in a sendable ('Final') state.
   const document = GENERATED_DOCS.find((d) => d.id === documentId);
 
   if (!document) {
@@ -61,18 +56,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // NOTE: sender's SEND_DOCUMENT permission is enforced client-side against
-  // the mock current-user/team record for this prototype (see
-  // getCurrentUserWithPermissions() in data/mockData.ts). Re-verify against
-  // the authenticated session user once real auth/session is wired in.
+  try {
+    const backendResponse = await fetch(`${FASTAPI_BASE_URL}/api/access/invite-collaborator`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        collaborator_email: recipientEmail,
+        role_authority: role,
+        document_name: document.name,
+      }),
+    });
 
-  // Simulated send latency — plug in your document-delivery provider here.
-  await new Promise((resolve) => setTimeout(resolve, 600));
+    const backendData = await backendResponse.json();
 
-  return NextResponse.json<SendDocumentResponse>({
-    success: true,
-    message: 'Document sent successfully.',
-    documentFileName: document.name,
-    sentAt: new Date().toISOString(),
-  });
+    if (!backendResponse.ok) {
+      return NextResponse.json<SendDocumentResponse>(
+        {
+          success: false,
+          message: backendData?.detail || 'Unable to send document. Please try again.',
+        },
+        { status: backendResponse.status }
+      );
+    }
+
+    return NextResponse.json<SendDocumentResponse>({
+      success: true,
+      message: backendData?.message ?? 'Document sent successfully.',
+      documentFileName: backendData?.documentFileName ?? document.name,
+      sentAt: backendData?.sentAt ?? new Date().toISOString(),
+    });
+  } catch {
+    return NextResponse.json<SendDocumentResponse>(
+      { success: false, message: 'Unable to reach the document delivery service. Please try again.' },
+      { status: 500 }
+    );
+  }
 }
