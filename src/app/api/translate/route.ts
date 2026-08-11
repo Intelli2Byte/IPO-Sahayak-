@@ -1,270 +1,189 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-type TranslationCache = {
-  translatedText: string;
-  expiresAt: number;
-};
+const LIBRE_TRANSLATE_URL =
+  process.env.LIBRE_TRANSLATE_URL ||
+  'http://127.0.0.1:5000/translate';
 
-// Server-side in-memory cache
-const translationCache = new Map<string, TranslationCache>();
+function isGarbageText(text: string): boolean {
+  if (!text) return true;
 
-// Cache translations for 1 hour
-const CACHE_TTL = 60 * 60 * 1000;
+  const value = text.trim();
 
-// Maximum number of Google requests allowed within this window
-const RATE_LIMIT_WINDOW = 1000; // 1 second
-const MAX_REQUESTS_PER_WINDOW = 5;
+  if (!value) return true;
 
-let requestTimestamps: number[] = [];
-
-function isRateLimited(): boolean {
-  const now = Date.now();
-
-  // Remove timestamps older than our window
-  requestTimestamps = requestTimestamps.filter(
-    (timestamp) => now - timestamp < RATE_LIMIT_WINDOW
-  );
-
-  if (requestTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+  if (value.length > 500) {
     return true;
   }
 
-  requestTimestamps.push(now);
+  if (/^(A-?){8,}$/i.test(value.replace(/\s+/g, ''))) {
+    return true;
+  }
+
+  if (/^(.)\1{15,}$/s.test(value)) {
+    return true;
+  }
+
+  const words = value.split(/\s+/);
+
+  if (words.length >= 8) {
+    const counts: Record<string, number> = {};
+
+    for (const word of words) {
+      counts[word] = (counts[word] || 0) + 1;
+    }
+
+    const maxCount = Math.max(
+      ...Object.values(counts)
+    );
+
+    if (maxCount / words.length > 0.7) {
+      return true;
+    }
+  }
+
   return false;
-}
-
-function getCacheKey(text: string, targetLanguage: string): string {
-  return `${targetLanguage}:${text.trim()}`;
-}
-
-function getCachedTranslation(
-  text: string,
-  targetLanguage: string
-): string | null {
-  const key = getCacheKey(text, targetLanguage);
-  const cached = translationCache.get(key);
-
-  if (!cached) {
-    return null;
-  }
-
-  // Remove expired cache entries
-  if (Date.now() > cached.expiresAt) {
-    translationCache.delete(key);
-    return null;
-  }
-
-  return cached.translatedText;
-}
-
-function setCachedTranslation(
-  text: string,
-  targetLanguage: string,
-  translatedText: string
-) {
-  const key = getCacheKey(text, targetLanguage);
-
-  translationCache.set(key, {
-    translatedText,
-    expiresAt: Date.now() + CACHE_TTL,
-  });
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, targetLanguage = 'hi' } = await req.json();
+    const body = await req.json();
 
-    if (
-      text === undefined ||
-      text === null ||
-      (typeof text === 'string' && !text.trim()) ||
-      (Array.isArray(text) && text.length === 0)
-    ) {
+    const text = body?.text;
+
+    const targetLanguage =
+      body?.targetLanguage || 'hi';
+
+    if (!text) {
       return NextResponse.json(
-        { error: 'Text parameter missing' },
+        {
+          error: 'Text parameter missing',
+        },
         { status: 400 }
       );
     }
 
-    const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Google Translate API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    const isArray = Array.isArray(text);
-
-    const texts: string[] = isArray ? text : [text];
-
-    // Remove empty values
-    const validTexts = texts.filter(
-      (value): value is string =>
-        typeof value === 'string' && value.trim().length > 0
-    );
-
-    if (validTexts.length === 0) {
-      return NextResponse.json(
-        {
-          translatedText: isArray ? [] : '',
-        },
-        { status: 200 }
-      );
-    }
+    const texts = Array.isArray(text)
+      ? text
+      : [text];
 
     /*
-     * ============================================================
-     * CHECK CACHE FIRST
-     * ============================================================
+     * Remove garbage before it reaches Argos.
      */
-
-    const results: (string | null)[] = validTexts.map((item) =>
-      getCachedTranslation(item, targetLanguage)
+    const validTexts = texts.map(
+      (value: unknown) =>
+        typeof value === 'string'
+          ? value
+          : String(value)
     );
 
-    const missingTexts: string[] = [];
-
-    validTexts.forEach((item, index) => {
-      if (results[index] === null) {
-        missingTexts.push(item);
-      }
-    });
-
     /*
-     * ============================================================
-     * EVERYTHING WAS CACHED
-     * ============================================================
+     * If every string is garbage, don't call
+     * LibreTranslate at all.
      */
+    const shouldTranslate =
+      validTexts.some(
+        (value) => !isGarbageText(value)
+      );
 
-    if (missingTexts.length === 0) {
-      const translatedResults = results as string[];
-
+    if (!shouldTranslate) {
       return NextResponse.json({
-        translatedText: isArray
-          ? translatedResults
-          : translatedResults[0],
-        cached: true,
+        translatedText: validTexts,
       });
     }
 
-    /*
-     * ============================================================
-     * RATE LIMIT GOOGLE REQUESTS
-     * ============================================================
-     */
-
-    if (isRateLimited()) {
-      return NextResponse.json(
-        {
-          error: 'Translation rate limit exceeded. Please try again shortly.',
-        },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': '1',
-          },
-        }
-      );
-    }
+    const translatedText: string[] = [];
 
     /*
-     * ============================================================
-     * CALL GOOGLE TRANSLATE
-     *
-     * IMPORTANT:
-     * All missing strings are sent in ONE Google request.
-     * ============================================================
+     * LibreTranslate accepts one q at a time reliably
+     * with the local Argos setup.
      */
-
-    const response = await fetch(
-      `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          q: missingTexts,
-          target: targetLanguage,
-          format: 'text',
-        }),
+    for (const original of validTexts) {
+      if (isGarbageText(original)) {
+        translatedText.push(original);
+        continue;
       }
-    );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Google Translation Error:', data);
-
-      return NextResponse.json(
-        {
-          error:
-            data?.error?.message ||
-            'Translation API error',
-        },
-        {
-          status: response.status,
-        }
-      );
-    }
-
-    const googleTranslations: string[] =
-      data?.data?.translations?.map(
-        (translation: { translatedText: string }) =>
-          translation.translatedText
-      ) || [];
-
-    /*
-     * ============================================================
-     * SAVE NEW TRANSLATIONS TO CACHE
-     * ============================================================
-     */
-
-    missingTexts.forEach((originalText, index) => {
-      const translatedText = googleTranslations[index];
-
-      if (translatedText) {
-        setCachedTranslation(
-          originalText,
-          targetLanguage,
-          translatedText
+      try {
+        const response = await fetch(
+          LIBRE_TRANSLATE_URL,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              q: original,
+              source: 'en',
+              target: targetLanguage,
+              format: 'text',
+            }),
+          }
         );
+
+        if (!response.ok) {
+          console.warn(
+            'LibreTranslate returned:',
+            response.status
+          );
+
+          translatedText.push(original);
+          continue;
+        }
+
+        const data =
+          await response.json();
+
+        const translated =
+          typeof data?.translatedText ===
+          'string'
+            ? data.translatedText
+            : original;
+
+        /*
+         * Don't accept garbage returned by
+         * the translation engine.
+         */
+        if (
+          isGarbageText(translated)
+        ) {
+          translatedText.push(original);
+        } else {
+          translatedText.push(
+            translated.trim()
+          );
+        }
+      } catch (error) {
+        console.warn(
+          'LibreTranslate request failed:',
+          error
+        );
+
+        /*
+         * Translation failure should never
+         * break the website.
+         */
+        translatedText.push(original);
       }
-    });
-
-    /*
-     * ============================================================
-     * COMBINE:
-     *
-     * cached translations + newly translated values
-     * ============================================================
-     */
-
-    const finalTranslations = validTexts.map((originalText) => {
-      return getCachedTranslation(
-        originalText,
-        targetLanguage
-      ) || originalText;
-    });
+    }
 
     return NextResponse.json({
-      translatedText: isArray
-        ? finalTranslations
-        : finalTranslations[0],
-      cached: false,
+      translatedText: Array.isArray(text)
+        ? translatedText
+        : translatedText[0],
     });
   } catch (error) {
-    console.error('Translation error:', error);
+    console.error(
+      'Translation route error:',
+      error
+    );
 
     return NextResponse.json(
       {
-        error: 'Internal server error',
+        error:
+          'Translation service unavailable',
       },
-      {
-        status: 500,
-      }
+      { status: 200 }
     );
   }
 }
