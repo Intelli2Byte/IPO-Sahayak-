@@ -1,8 +1,31 @@
-# 📄 IPO Sahayak: AI-Powered DRHP Generation & Compliance Analysis Platform
+<div align="center">
 
-**IPO Sahayak** is an enterprise-grade AI compliance and document automation platform that democratizes public capital market access for India’s 500,000+ IPO-eligible Small & Medium Enterprises (SMEs). 
+  <img src="public/logos/IPO-sahayak_logo-new.png" alt="IPO Sahayak Logo" width="220" />
 
-It combines a modern Next.js 15 frontend, a high-performance Python FastAPI backend, DeepSeek-V4 AI models, Celery async task processing, Brevo notifications, and Elasticsearch hybrid retrieval (BM25 + kNN vector search) to intelligently parse, generate, compile, and review SEBI-compliant Draft Red Herring Prospectus (DRHP) documents.
+  # 🏛️ IPO Sahayak — SME IPO DRHP Generator
+
+  <p align="center">
+    <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+    <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+    <img src="https://img.shields.io/badge/Next.js-15-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" />
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/DeepSeek--V4-AI_Engine-412991?style=for-the-badge&logo=openai&logoColor=white" alt="DeepSeek V4" />
+    <img src="https://img.shields.io/badge/Elasticsearch-Hybrid_Search-005571?style=for-the-badge&logo=elasticsearch&logoColor=white" alt="Elasticsearch" />
+    <img src="https://img.shields.io/badge/FAISS-Vector_Store-FF6F61?style=for-the-badge&logo=meta&logoColor=white" alt="FAISS" />
+    <img src="https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" />
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/PostgreSQL-ORM_DB-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+    <img src="https://img.shields.io/badge/Celery-Async_Queue-37B24D?style=for-the-badge&logo=celery&logoColor=white" alt="Celery" />
+    <img src="https://img.shields.io/badge/Brevo-Email_API-00B2A9?style=for-the-badge&logo=sendinblue&logoColor=white" alt="Brevo" />
+    <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License MIT" />
+  </p>
+
+  > **An agentic AI platform built for SEBI Compliance & SME IPO DRHP Generation — enabling SME promoters to generate a substantially complete, SEBI ICDR-compliant Draft Red Herring Prospectus (DRHP) — reducing preparation time from months to hours, with zero specialist legal knowledge required.**
+
+</div>
 
 ---
 
