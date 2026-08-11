@@ -15,10 +15,10 @@ export interface DocumentFile {
 // components/Dashboard/TeamAccess.tsx (via GeneratedDocumentsContext).
 // Do NOT duplicate this array anywhere else.
 export const GENERATED_DOCS: DocumentFile[] = [
-  { id: 'doc-1', name: 'DRHP.pdf', type: 'pdf', version: 'v2.1', dateGenerated: 'Oct 24, 2026', status: 'Final' },
-  { id: 'doc-2', name: 'Abridged drhp.pdf', type: 'pdf', version: 'v1.4', dateGenerated: 'Oct 23, 2026', status: 'Final' },
-  { id: 'doc-3', name: 'DRHP.docx', type: 'docx', version: 'v2.1', dateGenerated: 'Oct 24, 2026', status: 'Draft' },
-  { id: 'doc-4', name: 'Abridged drhp.docx', type: 'docx', version: 'v1.4', dateGenerated: 'Oct 23, 2026', status: 'Draft' },
+  { id: 'doc-1', name: 'DRHP.pdf', type: 'pdf', version: 'v2.1', dateGenerated: 'aug 8th, 2026', status: 'Final' },
+  { id: 'doc-2', name: 'Abridged drhp.pdf', type: 'pdf', version: 'v1.4', dateGenerated: 'Aug 8th, 2026', status: 'Final' },
+  { id: 'doc-3', name: 'DRHP.docx', type: 'docx', version: 'v2.1', dateGenerated: 'aug 8th, 2026', status: 'Draft' },
+  { id: 'doc-4', name: 'Abridged drhp.docx', type: 'docx', version: 'v1.4', dateGenerated: 'Aug 8th, 2026', status: 'Draft' },
 ];
 
 // Only 'Final' generated documents are eligible to be sent to a collaborator.
