@@ -32,6 +32,7 @@
 ## 📍 Table of Contents
 - [💡 The Problem & The Solution](#-the-problem--the-solution)
 - [✨ Core Features Breakdown](#-core-features-breakdown)
+- [🖥️ Interactive Dashboard & User Experience Flow](#️-interactive-dashboard--user-experience-flow)
 - [🛠️ Technology Stack](#️-technology-stack)
 - [🏗️ System Architecture & Visual Pipeline](#️-system-architecture--visual-pipeline)
   - [Step 1: Frontend User Journey & Wizard Onboarding](#step-1-frontend-user-journey--wizard-onboarding)
@@ -90,6 +91,112 @@ Preparing a Draft Red Herring Prospectus (DRHP) under SEBI ICDR Regulations is a
 ### ⚡ 6. Asynchronous Processing & Brevo Dispatch
 * **Celery + Redis Queues:** Offloads PDF compilation, WeasyPrint/ReportLab layout rendering, and batch AI queries to background workers.
 * **Brevo Email Service:** Triggers transactional emails, security verification codes, team invitation links, and review handoff notifications.
+
+---
+
+## 🖥️ Interactive Dashboard & User Experience Flow
+
+Experience the seamless end-to-end user workflow of **IPO Sahayak**—from initial CIN onboarding to automated DRHP generation, SEBI compliance checking, and collaborative PDF review.
+
+---
+
+### 1️⃣ MCA21 CIN Lookup & Instant Company Profile Auto-Fill
+SME Promoters enter their Corporate Identification Number (CIN). The platform connects directly to the MCA21 database to instantly pull corporate identity, director profiles, and registered address information.
+
+<p align="center">
+  <img src="public/images/dashboard/01_onboarding_cin_lookup.png" alt="MCA21 CIN Lookup Onboarding" width="95%" />
+</p>
+
+---
+
+### 2️⃣ Interactive Workspace & Analytics Overview
+Central command dashboard displaying live DRHP generation progress, active team collaborators, SEBI compliance status, and recent document uploads.
+
+<p align="center">
+  <img src="public/images/dashboard/03_workspace_overview_dashboard.png" alt="Workspace Overview Dashboard" width="95%" />
+</p>
+
+---
+
+### 3️⃣ Real-Time Metrics & Team Access Controls (RBAC)
+Role-Based Access Control (RBAC) allows Merchant Bankers, Promoters, Chartered Accountants, and Lawyers to collaborate with granular permission levels.
+
+<p align="center">
+  <img src="public/images/dashboard/05_team_access_rbac.png" alt="Team Access Control & RBAC" width="95%" />
+</p>
+
+---
+
+### 4️⃣ Guided 8-Panel DRHP Questionnaire Wizard
+A step-by-step plain-language wizard guiding promoters through corporate disclosures, financial dossiers, risk factors, objects of the issue, and legal litigations.
+
+<details>
+<summary><b>📸 Click to view 8-Panel Wizard Flow Screenshots</b></summary>
+<br/>
+
+#### Panel 1: Corporate Identity & Promoter Details
+<p align="center">
+  <img src="public/images/dashboard/06_drhp_wizard_corporate_identity.png" alt="Wizard Panel 1: Corporate Identity" width="90%" />
+</p>
+
+#### Panel 2: Business Overview & Industry Model
+<p align="center">
+  <img src="public/images/dashboard/07_drhp_wizard_business_overview.png" alt="Wizard Panel 2: Business Overview" width="90%" />
+</p>
+
+#### Panel 3: Financial Dossier & 3-Year Audited Metrics
+<p align="center">
+  <img src="public/images/dashboard/08_drhp_wizard_financial_dossier.png" alt="Wizard Panel 3: Financial Dossier" width="90%" />
+</p>
+
+#### Panel 4: Market Channels & Sales Breakdown
+<p align="center">
+  <img src="public/images/dashboard/09_drhp_wizard_market_channels.png" alt="Wizard Panel 4: Market Channels" width="90%" />
+</p>
+
+#### Panel 5: Net Issue Proceeds & Use of Funds Ledger
+<p align="center">
+  <img src="public/images/dashboard/10_drhp_wizard_use_of_funds.png" alt="Wizard Panel 5: Use of Funds" width="90%" />
+</p>
+
+#### Panel 6: Risk Assessment & Internal Risk Factors
+<p align="center">
+  <img src="public/images/dashboard/11_drhp_wizard_risk_assessment.png" alt="Wizard Panel 6: Risk Assessment" width="90%" />
+</p>
+
+#### Panel 7: Statutory Disclosures & Legal Litigations
+<p align="center">
+  <img src="public/images/dashboard/12_drhp_wizard_legal_disclosures.png" alt="Wizard Panel 7: Legal Disclosures" width="90%" />
+</p>
+
+</details>
+
+---
+
+### 5️⃣ SEBI ICDR 2018 Automated Compliance Tracker
+Automated compliance checker verifying financial eligibility ratios, mandatory disclosure clauses, and highlighting missing regulatory filings in real time.
+
+<p align="center">
+  <img src="public/images/dashboard/13_sebi_compliance_tracker.png" alt="SEBI Compliance Tracker" width="95%" />
+</p>
+
+---
+
+### 6️⃣ ISO 27001 Document Vault & Dual-Panel PDF Reviewer
+Side-by-side split viewer enabling legal teams to compare original uploaded documents with generated SEBI DRHP pages, add inline annotations, and review threaded comments.
+
+<p align="center">
+  <img src="public/images/dashboard/14_document_vault_split_viewer.png" alt="Document Vault Split Viewer" width="95%" />
+</p>
+
+---
+
+### 7️⃣ Final DRHP Document Compilation & Export Handoff
+Instant compilation of 200+ page DRHP and 10-page Abridged Prospectus PDFs with options for instant download, digital signature verification, and email dispatch.
+
+<p align="center">
+  <img src="public/images/dashboard/15_generated_drhp_documents.png" alt="Generated DRHP Documents & Download Manager" width="95%" />
+</p>
 
 ---
 
