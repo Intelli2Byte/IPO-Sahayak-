@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -105,7 +104,7 @@ export default function Home() {
       case 'overview':
         return <Overview setCurrentTab={handleTabChange} />;
       case 'wizard':
-        return <StepWizard />;
+        return <StepWizard onNavigateToGenerated={() => handleTabChange('generated')} />;
       case 'vault':
         return <VaultManager />;
       case 'compliance':
@@ -422,4 +421,3 @@ export default function Home() {
     </GeneratedDocumentsProvider>
   );
 }
-
